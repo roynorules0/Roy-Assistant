@@ -951,7 +951,18 @@ Core Agentic System Tools & Live Capabilities:
 6. YOUTUBE EMBEDDED SYSTEM (FOR SONG/MUSIC REQUESTS):
    - If the user asks to play a song, play music, play a track (e.g., "Roy, One Bottle Down chalao", "Play song [topic]", "Gaana chalao [topic]"), you MUST call 'ytPlaySong' with the query set to the song name (or song title).
    - Once called, you should respond with exactly: "Ji Rishu Boss, YouTube par [song_name] play kar rahi hu." (where [song_name] matches the user's requested song, e.g. "One Bottle Down"). NEVER redirect the user, and NEVER use window.open or openWebsite. The song MUST play directly inside the embedded player on the current page.
-7. YOUTUBE EMBEDDED PLAYER CONTROLS (VIDEO MODE):
+7. MUSIC MODE V3 SYSTEM RULES:
+   - When the user says "Music Mode On" (or "Activate Music Mode"), you MUST call 'ytSetMusicMode' with enabled=true. Once called, you MUST reply with exactly: "Ji Rishu Boss, Music Mode activate kar rahi hu."
+   - When the user says "Music Mode Off" (or "Deactivate Music Mode"), you MUST call 'ytSetMusicMode' with enabled=false. Once called, you MUST reply with exactly: "Ji Rishu Boss, Music Mode deactivate kar rahi hu."
+   - Voice Volume Control commands: 
+     - "Mute volume" or "Mute karo": call 'ytSetVolume' with mute=true.
+     - "Unmute volume" or "Unmute karo": call 'ytSetVolume' with mute=false.
+     - "Set volume to [0-100]" or "Volume [0-100] percent karo": call 'ytSetVolume' with volume set to target number.
+     - "Volume badhao" / "Increase volume" or "Volume kam karo" / "Volume dhiima karo": call 'ytSetVolume' with relativeChange set to +15 or -15 appropriately.
+   - Song Repeat / Loop commands:
+     - "Repeat song", "Loop song", "Loop chalu karo", "Song repeat par lagao": call 'ytSetRepeat' with enabled=true. Once called, tell the user in Hinglish: "Ji Rishu Boss, song loop mode chalu kar diya hai."
+     - "Repeat off", "Loop band karo", "Loop off": call 'ytSetRepeat' with enabled=false. Once called, tell the user in Hinglish: "Ji Rishu Boss, song loop mode band kar diya hai."
+8. YOUTUBE EMBEDDED PLAYER CONTROLS (VIDEO MODE):
    - If the user commands you to play an educational video, a tutorial, a lecture, or generic non-music video (e.g., "Play a video about [topic]", "tutorial chalao [topic]"), you MUST call 'ytPlayVideo' with the query set to the topic. This will open Video Mode directly on the current page inside the Roy Girl AI interface. Natively embeds playback on the same screen.
    - If the user wants to pause, resume, stop, skip forward, skip backward, next, or previous video, call the appropriate tool: 'ytPauseVideo', 'ytResumeVideo', 'ytStopVideo', 'ytSkipForward', 'ytSkipBackward', 'ytNextVideo', 'ytPreviousVideo'.
    - If the user says "Resume Video", "Continue playing", or "Chalu karo video", you MUST call 'ytResumeVideo' so the system will continue playback from the last saved position.
@@ -1255,6 +1266,40 @@ Core Agentic System Tools & Live Capabilities:
                   parameters: {
                     type: Type.OBJECT,
                     properties: {}
+                  }
+                },
+                {
+                  name: 'ytSetMusicMode',
+                  description: 'Activates or deactivates Music Mode. Use when the user says "Music Mode On" (turn on) or "Music Mode Off" (turn off).',
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      enabled: { type: Type.BOOLEAN, description: 'True to activate music mode, false to deactivate' }
+                    },
+                    required: ['enabled']
+                  }
+                },
+                {
+                  name: 'ytSetRepeat',
+                  description: 'Enables or disables repeat/loop mode for the active video. Use when user says "Repeat song" (repeat on), "Loop song", "Loop on", or "Repeat off" (repeat off), "Loop off".',
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      enabled: { type: Type.BOOLEAN, description: 'True to turn repeat/loop on, false to turn it off' }
+                    },
+                    required: ['enabled']
+                  }
+                },
+                {
+                  name: 'ytSetVolume',
+                  description: 'Adjusts or mutes the volume of playback video/song. Use when user says "Mute volume" (mute: true), "Unmute" (mute: false), "Set volume to 50" (volume: 50), "Increase volume" (relativeChange: 15), or "Peeche karo volume" / "Volume dhiima karo" (relativeChange: -15).',
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      volume: { type: Type.NUMBER, description: 'Absolute target volume value from 0 to 100' },
+                      relativeChange: { type: Type.NUMBER, description: 'Positive or negative value to adjust relative to current volume (e.g. 15 or -15)' },
+                      mute: { type: Type.BOOLEAN, description: 'True to mute, false to unmute' }
+                    }
                   }
                 },
               ],

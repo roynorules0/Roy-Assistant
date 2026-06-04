@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAppStore, YouTubeVideo } from '../store';
 import { 
-  Play, Pause, Square, SkipForward, RotateCcw, Volume2, 
+  Play, Pause, Square, SkipForward, SkipBack, RotateCcw, Volume2, 
   VolumeX, Heart, Clock, Send, X, AlertTriangle, ListMusic, 
-  ExternalLink, Gauge, Cpu, RefreshCw, Sliders, Check
+  ExternalLink, Gauge, Cpu, RefreshCw, Sliders, Check, Repeat
 } from 'lucide-react';
 
 interface YouTubeIframePlayer {
@@ -212,6 +212,22 @@ export default function YouTubePlayer() {
     } catch {}
   }, [networkSpeed, store.playbackMode]);
 
+  // Synchronize player volume and mute state with store shifts
+  useEffect(() => {
+    const player = playerRef.current;
+    if (player) {
+      try {
+        if (typeof (player as any).setVolume === 'function') {
+          (player as any).setVolume(store.mediaVolume);
+        }
+        if (typeof (player as any).mute === 'function' && typeof (player as any).unmute === 'function') {
+          if (store.mediaMuted) (player as any).mute();
+          else (player as any).unmute();
+        }
+      } catch {}
+    }
+  }, [store.mediaVolume, store.mediaMuted, video]);
+
   // Private fallback search for embed-disabled videos
   const handleLoadAlternative = async () => {
     if (!video || loadingAlternativeRef.current) return;
@@ -301,6 +317,17 @@ export default function YouTubePlayer() {
       playerRef.current = event.target;
       if (startPosition > 0) {
         event.target.seekTo(startPosition, true);
+      }
+      try {
+        if (typeof event.target.setVolume === 'function') {
+          event.target.setVolume(store.mediaVolume);
+        }
+        if (typeof event.target.mute === 'function' && typeof event.target.unmute === 'function') {
+          if (store.mediaMuted) event.target.mute();
+          else event.target.unmute();
+        }
+      } catch (volErr) {
+        console.warn('Initial volume setup fail', volErr);
       }
       event.target.playVideo();
       store.setPlayerState('playing');
@@ -398,7 +425,13 @@ export default function YouTubePlayer() {
           store.setPlayerState('paused');
         }
       } else if (state === 0) { // Ended
-        store.setPlayerState('ended');
+        if (store.repeatEnabled) {
+          event.target.seekTo(0, true);
+          event.target.playVideo();
+          store.setPlayerState('playing');
+        } else {
+          store.setPlayerState('ended');
+        }
       }
     };
 
@@ -449,8 +482,11 @@ export default function YouTubePlayer() {
       const player = playerRef.current;
       if (!player) return;
 
+      const action = typeof cmd === 'string' ? cmd : cmd.action;
+      const val = typeof cmd === 'string' ? null : cmd.value;
+
       try {
-        switch (cmd) {
+        switch (action) {
           case 'play':
             player.playVideo();
             store.setPlayerState('playing');
@@ -474,6 +510,17 @@ export default function YouTubePlayer() {
           case 'stop':
             store.setActiveVideo(null);
             store.setPlayerState('stopped');
+            break;
+          case 'set-volume':
+            if (typeof (player as any).setVolume === 'function') {
+              (player as any).setVolume(val);
+            }
+            break;
+          case 'set-mute':
+            if (typeof (player as any).mute === 'function' && typeof (player as any).unmute === 'function') {
+              if (val) (player as any).mute();
+              else (player as any).unmute();
+            }
             break;
           default:
             break;
@@ -531,6 +578,29 @@ export default function YouTubePlayer() {
     } catch {}
   };
 
+  const playNext = () => {
+    const currentIndex = store.watchHistory.findIndex(h => h.id === video.id);
+    if (currentIndex > -1 && currentIndex < store.watchHistory.length - 1) {
+      const nextVid = store.watchHistory[currentIndex + 1];
+      store.setActiveVideo(nextVid);
+    } else if (store.watchLater.length > 0) {
+      const nextVid = store.watchLater[0];
+      store.setActiveVideo(nextVid);
+    }
+  };
+
+  const playPrevious = () => {
+    const currentIndex = store.watchHistory.findIndex(h => h.id === video.id);
+    if (currentIndex > 0) {
+      const prevVid = store.watchHistory[currentIndex - 1];
+      store.setActiveVideo(prevVid);
+    }
+  };
+
+  const toggleRepeat = () => {
+    store.setRepeatEnabled(!store.repeatEnabled);
+  };
+
   const postVideoToTelegram = async () => {
     try {
       const textBlock = `🎥 *Roy Boss recommendation:* **${video.title}**\n\nChannel: ${video.channelName}\n\nLink: ${video.url}\n\n${video.description || ''}`.substring(0, 4000);
@@ -573,17 +643,38 @@ export default function YouTubePlayer() {
     <div className="w-full max-w-2xl mx-auto bg-zinc-950 border border-zinc-900 rounded-3xl p-5 shadow-2xl space-y-5">
       
       {/* Header Panel */}
-      <div className="flex justify-between items-start">
-        <div className="space-y-1">
-          <span className="text-[9px] font-mono tracking-widest text-rose-450 uppercase font-bold flex items-center gap-1">
-            <ListMusic size={11} className="animate-pulse" /> CURRENTLY PLAYING MEDIA
-          </span>
-          <h2 className="text-sm font-mono font-black text-rose-350 pr-8 line-clamp-2 leading-snug">
-            {video.title}
-          </h2>
-          <p className="text-[10px] font-mono text-zinc-500">
-            Channel: <span className="text-zinc-300 font-bold">{video.channelName}</span>
-          </p>
+      <div className="flex justify-between items-start gap-4">
+        <div className="flex gap-3 items-center">
+          {video.thumbnail && (
+            <img 
+              src={video.thumbnail} 
+              alt={video.title} 
+              className="w-12 h-12 object-cover rounded-xl border border-zinc-850 shadow-md shrink-0" 
+              referrerPolicy="no-referrer"
+            />
+          )}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-mono tracking-widest text-rose-450 uppercase font-bold flex items-center gap-1">
+                <ListMusic size={11} className="animate-pulse" /> CURRENTLY PLAYING SONG
+              </span>
+              <span className={`px-2 py-0.5 rounded text-[8px] font-mono font-bold uppercase tracking-wider ${
+                store.playerState === 'playing' ? 'bg-emerald-950/45 border border-emerald-900 text-emerald-400' :
+                isSmartBuffering ? 'bg-amber-950/45 border border-amber-900 text-amber-400 animate-pulse' :
+                store.playerState === 'paused' ? 'bg-amber-950/20 border border-amber-900/40 text-amber-500' :
+                store.playerState === 'stopped' ? 'bg-zinc-900 border border-zinc-800 text-zinc-500' :
+                'bg-blue-955/20 border border-blue-900/40 text-blue-400'
+              }`}>
+                {isSmartBuffering ? 'BUFFERING' : store.playerState.toUpperCase()}
+              </span>
+            </div>
+            <h2 className="text-sm font-mono font-black text-rose-350 pr-8 line-clamp-1 leading-snug">
+              {video.title}
+            </h2>
+            <p className="text-[10px] font-mono text-zinc-500">
+              Artist: <span className="text-zinc-300 font-bold">{video.channelName}</span>
+            </p>
+          </div>
         </div>
 
         <button 
@@ -667,17 +758,24 @@ export default function YouTubePlayer() {
 
         {/* Action Button Deck */}
         <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-zinc-900">
-          <div className="flex gap-2.5">
+          <div className="flex gap-2.5 items-center flex-wrap">
+            <button 
+              onClick={playPrevious}
+              className="p-2.5 bg-zinc-900 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-rose-400 transition-all cursor-pointer border border-zinc-850"
+              title="Previous Song"
+            >
+              <SkipBack size={14} fill="currentColor" />
+            </button>
             <button 
               onClick={seekBackward}
-              className="p-2.5 bg-zinc-900 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-rose-400 transition-all cursor-pointer border border-zinc-850"
+              className="p-2.5 bg-zinc-900 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-rose-450 transition-all cursor-pointer border border-zinc-850"
               title="Skip Backward 10s"
             >
               <RotateCcw size={14} />
             </button>
             <button 
               onClick={togglePlay}
-              className="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-mono text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-lg shadow-rose-950/40"
+              className="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-mono text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-lg shadow-rose-950/40 shrink-0"
               disabled={isSmartBuffering || recoveryActive}
             >
               {store.playerState === 'playing' ? (
@@ -692,10 +790,29 @@ export default function YouTubePlayer() {
             </button>
             <button 
               onClick={seekForward}
-              className="p-2.5 bg-zinc-900 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-rose-400 transition-all cursor-pointer border border-zinc-850"
+              className="p-2.5 bg-zinc-900 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-rose-450 transition-all cursor-pointer border border-zinc-850"
               title="Skip Forward 10s"
             >
               <SkipForward size={14} />
+            </button>
+            <button 
+              onClick={playNext}
+              className="p-2.5 bg-zinc-900 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-rose-450 transition-all cursor-pointer border border-zinc-850"
+              title="Next Song"
+            >
+              <SkipForward size={14} fill="currentColor" />
+            </button>
+            <button 
+              onClick={toggleRepeat}
+              className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-mono font-bold ${
+                store.repeatEnabled 
+                  ? 'bg-rose-950/30 border-rose-900 text-rose-400 shadow-md shadow-rose-950/20' 
+                  : 'bg-zinc-900 border-zinc-850 text-zinc-400 hover:text-white'
+              }`}
+              title="Repeat/Loop Song Code"
+            >
+              <Repeat size={14} className={store.repeatEnabled ? "animate-pulse font-bold" : ""} />
+              <span className="text-[10px] hidden sm:inline">LOOP</span>
             </button>
           </div>
 
@@ -722,15 +839,7 @@ export default function YouTubePlayer() {
             >
               <Clock size={14} />
             </button>
-            <a
-              href={video.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="p-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-850 text-red-500 hover:text-red-400 rounded-xl transition-all flex items-center gap-1 text-[11px] font-mono font-bold"
-            >
-              <ExternalLink size={12} />
-              <span className="hidden sm:inline">YOUTUBE</span>
-            </a>
+
             <button
               onClick={postVideoToTelegram}
               className="p-2.5 bg-zinc-900 hover:bg-zinc-800 rounded-xl text-cyan-400 hover:text-cyan-300 transition-all cursor-pointer border border-zinc-850 flex items-center gap-1.5 text-[11px] font-mono"
@@ -738,6 +847,36 @@ export default function YouTubePlayer() {
               <Send size={12} className="rotate-[-15deg] translate-y-[-1px]" />
               <span className="hidden sm:inline font-bold">TELEGRAM</span>
             </button>
+          </div>
+        </div>
+
+        {/* Dynamic Volume Control Bar */}
+        <div className="flex items-center justify-between gap-3 p-3 bg-zinc-900/40 rounded-xl border border-zinc-900/60 font-mono text-xs">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => store.setMediaMuted(!store.mediaMuted)}
+              className="p-1.5 hover:bg-zinc-800 rounded-lg text-rose-400 font-bold transition-all cursor-pointer"
+              title={store.mediaMuted ? "Unmute" : "Mute"}
+            >
+              {store.mediaMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+            </button>
+            <span className="text-[10px] text-zinc-400 font-bold uppercase shrink-0">
+              Volume: {store.mediaMuted ? 'Muted' : `${store.mediaVolume}%`}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-grow max-w-[200px]">
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={store.mediaMuted ? 0 : store.mediaVolume}
+              onChange={(e) => {
+                store.setMediaMuted(false);
+                store.setMediaVolume(parseInt(e.target.value));
+              }}
+              className="w-full h-1 bg-zinc-850 accent-rose-500 rounded-lg appearance-none cursor-pointer"
+            />
           </div>
         </div>
 

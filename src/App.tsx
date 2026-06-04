@@ -9,7 +9,7 @@ import TelegramPublisher from './components/TelegramPublisher';
 import YouTubePlayer from './components/YouTubePlayer';
 import YouTubeMediaHub from './components/YouTubeMediaHub';
 import { 
-  Mic, MicOff, Power, PowerOff, Settings as SettingsIcon, LayoutDashboard, Sparkles, User, Info, MessageSquare, ShieldCheck, Share2, Send, Youtube, Disc
+  Mic, MicOff, Power, PowerOff, Settings as SettingsIcon, LayoutDashboard, Sparkles, User, Info, MessageSquare, ShieldCheck, Share2, Send, Youtube, Disc, ListMusic
 } from 'lucide-react';
 
 export default function App() {
@@ -541,6 +541,38 @@ export default function App() {
                   } else {
                     resultMessage = 'No active YouTube video is currently loaded into playback memory to post to channel targets.';
                   }
+                } else if (name === 'ytSetMusicMode') {
+                  const enabled = args.enabled === true;
+                  store.setMusicMode(enabled);
+                  resultMessage = enabled 
+                    ? "Ji Rishu Boss, Music Mode activate kar rahi hu." 
+                    : "Ji Rishu Boss, Music Mode deactivate kar rahi hu.";
+                } else if (name === 'ytSetRepeat') {
+                  const enabled = args.enabled === true;
+                  store.setRepeatEnabled(enabled);
+                  window.dispatchEvent(new CustomEvent('yt-player-command', { detail: { action: 'set-repeat', value: enabled } }));
+                  resultMessage = enabled
+                    ? "Ji Rishu Boss, song loop mode chalu kar diya hai."
+                    : "Ji Rishu Boss, song loop mode band kar diya hai.";
+                } else if (name === 'ytSetVolume') {
+                  let targetVolume = store.mediaVolume;
+                  if (args.mute !== undefined) {
+                    store.setMediaMuted(args.mute);
+                    window.dispatchEvent(new CustomEvent('yt-player-command', { detail: { action: 'set-mute', value: args.mute } }));
+                    resultMessage = args.mute 
+                      ? "Ji Rishu Boss, volume mute kar diya." 
+                      : "Ji Rishu Boss, volume unmute kar diya.";
+                  } else {
+                    if (args.volume !== undefined) {
+                      targetVolume = args.volume;
+                    } else if (args.relativeChange !== undefined) {
+                      targetVolume = store.mediaVolume + args.relativeChange;
+                    }
+                    store.setMediaMuted(false);
+                    store.setMediaVolume(targetVolume);
+                    window.dispatchEvent(new CustomEvent('yt-player-command', { detail: { action: 'set-volume', value: targetVolume } }));
+                    resultMessage = `Ji Rishu Boss, volume ${targetVolume} percent kar diya.`;
+                  }
                 }
               } catch (e: any) {
                 resultMessage = `Error executing browser layout action: ${e.message}`;
@@ -707,7 +739,12 @@ export default function App() {
           <div className="flex-1 max-w-4xl mx-auto w-full px-4 py-8 flex flex-col justify-center gap-6">
             
             {/* Visual core containing responsive speech orb */}
-            <div className="flex-1 flex flex-col justify-center items-center w-full">
+            <div className="flex-1 flex flex-col justify-center items-center w-full relative">
+              {store.musicMode && !store.activeVideo && (
+                <div className="absolute top-1 border border-rose-900 bg-rose-950/30 text-rose-400 px-3 py-1 rounded-full text-[11px] font-mono tracking-widest uppercase font-black flex items-center gap-1.5 animate-pulse shadow-lg shadow-rose-950/40 z-10 select-none mb-4">
+                  <ListMusic size={12} className="animate-spin" /> Ji Rishu Boss, Music Mode on hai
+                </div>
+              )}
               {store.activeVideo ? (
                 <YouTubePlayer />
               ) : (

@@ -65,6 +65,10 @@ export interface AppState {
   savedVideos: YouTubeVideo[];
   watchLater: YouTubeVideo[];
   playbackMode: 'best' | 'balanced' | 'smooth';
+  musicMode: boolean;
+  repeatEnabled: boolean;
+  mediaVolume: number;
+  mediaMuted: boolean;
 
   // State actions
   setApiKey: (key: string) => void;
@@ -94,6 +98,10 @@ export interface AppState {
   toggleWatchLater: (video: YouTubeVideo) => void;
   clearWatchHistory: () => void;
   setPlaybackMode: (mode: 'best' | 'balanced' | 'smooth') => void;
+  setMusicMode: (enabled: boolean) => void;
+  setRepeatEnabled: (enabled: boolean) => void;
+  setMediaVolume: (vol: number) => void;
+  setMediaMuted: (muted: boolean) => void;
 
   // Persistent Actions
   initStore: () => Promise<void>;
@@ -193,6 +201,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   })(),
   playbackMode: (localStorage.getItem('__roy_playbackMode') as 'best' | 'balanced' | 'smooth') || 'smooth',
+  musicMode: localStorage.getItem('__roy_musicMode') === 'true',
+  repeatEnabled: localStorage.getItem('__roy_repeatEnabled') === 'true',
+  mediaVolume: localStorage.getItem('__roy_mediaVolume') !== null ? Number(localStorage.getItem('__roy_mediaVolume')) : 80,
+  mediaMuted: localStorage.getItem('__roy_mediaMuted') === 'true',
 
   setApiKey: (key) => {
     localStorage.setItem('__roy_apiKey', key);
@@ -292,6 +304,23 @@ export const useAppStore = create<AppState>((set, get) => ({
   setPlaybackMode: (mode) => {
     localStorage.setItem('__roy_playbackMode', mode);
     set({ playbackMode: mode });
+  },
+  setMusicMode: (enabled) => {
+    localStorage.setItem('__roy_musicMode', String(enabled));
+    set({ musicMode: enabled });
+  },
+  setRepeatEnabled: (enabled) => {
+    localStorage.setItem('__roy_repeatEnabled', String(enabled));
+    set({ repeatEnabled: enabled });
+  },
+  setMediaVolume: (vol) => {
+    const clamped = Math.max(0, Math.min(100, vol));
+    localStorage.setItem('__roy_mediaVolume', String(clamped));
+    set({ mediaVolume: clamped });
+  },
+  setMediaMuted: (muted) => {
+    localStorage.setItem('__roy_mediaMuted', String(muted));
+    set({ mediaMuted: muted });
   },
 
   // Load persistent DB records
