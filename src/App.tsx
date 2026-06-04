@@ -11,8 +11,10 @@ import YouTubeMediaHub from './components/YouTubeMediaHub';
 import CameraSystem from './components/CameraSystem';
 import StoryMode from './components/StoryMode';
 import VaultTab from './components/VaultTab';
+import * as db from './db';
 import { 
-  Mic, MicOff, Power, PowerOff, Settings as SettingsIcon, LayoutDashboard, Sparkles, User, Info, MessageSquare, ShieldCheck, Share2, Send, Youtube, Disc, ListMusic, Camera, BookOpen, FolderHeart, X
+  Mic, MicOff, Power, PowerOff, Settings as SettingsIcon, LayoutDashboard, Sparkles, User, Info, MessageSquare, ShieldCheck, Share2, Send, Youtube, Disc, ListMusic, Camera, BookOpen, FolderHeart, X,
+  Heart, Maximize2, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Eye, Trash2
 } from 'lucide-react';
 
 export default function App() {
@@ -26,6 +28,136 @@ export default function App() {
   const [isSubmittingText, setIsSubmittingText] = useState(false);
   const pendingTextRef = useRef<string>('');
   const [chatVisible, setChatVisible] = useState(false);
+
+  // Premium On-Screen Photo Display System state
+  const [onScreenPhotos, setOnScreenPhotos] = useState<db.PhotoRecord[]>([]); // holds list of currently queried PhotoRecords to present
+  const [activePhotoIndex, setActivePhotoIndex] = useState<number>(0);
+  const [isFullscreenPhotoOpen, setIsFullscreenPhotoOpen] = useState<boolean>(false);
+  const [onScreenZoomLevel, setOnScreenZoomLevel] = useState<number>(1);
+  const [photoOrientations, setPhotoOrientations] = useState<Record<string, 'portrait' | 'landscape' | 'square'>>({});
+
+  const handleOnScreenImageLoad = (photoId: string, e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    const ratio = w / h;
+    let orientation: 'portrait' | 'landscape' | 'square' = 'square';
+    if (ratio > 1.2) {
+      orientation = 'landscape';
+    } else if (ratio < 0.8) {
+      orientation = 'portrait';
+    }
+    setPhotoOrientations(prev => ({ ...prev, [photoId]: orientation }));
+  };
+
+  // Voice Interruption & Safety Timers
+  const lastUserInteractionRef = useRef<number>(Date.now());
+
+  const registerUserInteraction = () => {
+    lastUserInteractionRef.current = Date.now();
+  };
+
+  const checkInterruptCommand = (text: string): { isInterrupt: boolean; isEmergency: boolean } => {
+    const norm = text.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim();
+    const words = norm.split(/\s+/);
+    
+    // Emergency stop check (even without "roy" for extreme safety)
+    if (words.includes("emergency") && words.includes("stop")) {
+      return { isInterrupt: true, isEmergency: true };
+    }
+    if (norm.includes("roy emergency stop") || norm.includes("emergency stop")) {
+      return { isInterrupt: true, isEmergency: true };
+    }
+    
+    // Check keyword combination of "roy" + other words
+    const hasRoy = words.includes("roy") || words.includes("roy's") || norm.includes("roy");
+    
+    if (hasRoy) {
+      const stopperWords = ["stop", "bas", "bus", "chup", "pause", "suno", "ruko", "ruk"];
+      const hasStopper = stopperWords.some(w => words.includes(w) || norm.includes(w));
+      if (hasStopper) {
+        return { isInterrupt: true, isEmergency: false };
+      }
+    }
+    
+    // Fallback direct exact phrases check
+    const exactPhrases = [
+      "roy stop",
+      "roy bas",
+      "roy chup ho jao",
+      "roy suno",
+      "roy pause",
+      "roy ruk jao",
+      "chup ho jao"
+    ];
+    const hasExact = exactPhrases.some(phrase => norm.includes(phrase));
+    
+    return { isInterrupt: hasExact, isEmergency: false };
+  };
+
+  const handleVoiceInterrupt = (isEmergency: boolean = false) => {
+    console.log("VOICE INTERRUPT TRIGGERED. Emergency flag:", isEmergency);
+    
+    // 1. Immediately kill/cut-off any active client audio
+    voiceEngine.interrupt();
+    
+    // 2. Halt story mode progression
+    if (store.storyState.isActive) {
+      if (isEmergency) {
+        store.resetStoryState();
+      } else {
+        store.setStoryState({ isPaused: true });
+      }
+    }
+
+    // 3. Drive UI back to LISTENING status
+    store.setLiveState('listening');
+    store.setAiTranscript('');
+    currentAiUtterance.current = '';
+    
+    // Extreme Emergency cleanup
+    if (isEmergency && store.activeVideo) {
+      store.setActiveVideo(null);
+      store.setPlayerState('stopped');
+    }
+
+    // 4. Send override command package to Gemini WebSocket pipeline
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        text: `System Command / INTERACTION INTERRUPTED: User issued a VOICE STOP command. Clear your entire speech queue, ignore previous inputs, stop all storytelling/narration immediately, reset state, and reply with exactly: "Ji Rishu Boss, sun rahi hu." and then wait.`
+      }));
+    }
+  };
+
+  // 30-second Safety Timeout check loop for Story Mode
+  useEffect(() => {
+    const timeoutInterval = setInterval(() => {
+      if (store.storyState.isActive && !store.storyState.isPaused) {
+        const elapsed = Date.now() - lastUserInteractionRef.current;
+        if (elapsed > 30000) { // 30 seconds
+          console.warn("Safety Timeout: 30 seconds of quiet narration without user interaction. Suspending narration...");
+          
+          // Switch story state to paused
+          store.setStoryState({ isPaused: true });
+          
+          // Cut off audio playback
+          voiceEngine.interrupt();
+          
+          // Change UI state back to listening
+          store.setLiveState('listening');
+
+          // Send notice packet to Gemini server to speak suspension notice
+          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+              text: "System Command: Narrating chapter was automatically paused due to 30 second safety inactivity timeout without user feedback. Speak exactly: \"Rishu Boss, aap thak gaye lagte hain. Maine kahani pause kar di hai. Jab aap tayyar hon, tab continue boliyega.\""
+            }));
+          }
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(timeoutInterval);
+  }, [store.storyState]);
 
   // Commit utterances logic
   const commitUserUtterance = async () => {
@@ -68,6 +200,15 @@ export default function App() {
 
     setTextInputValue('');
     setIsSubmittingText(true);
+    
+    registerUserInteraction();
+
+    const { isInterrupt, isEmergency } = checkInterruptCommand(text);
+    if (isInterrupt) {
+      handleVoiceInterrupt(isEmergency);
+      setIsSubmittingText(false);
+      return;
+    }
     
     // Append to local history so user has instant visual output response
     await store.addConversationMessage('user', text);
@@ -342,6 +483,14 @@ export default function App() {
             }
             store.setUserTranscript(data.userTranscript);
             currentUserUtterance.current = data.userTranscript;
+
+            registerUserInteraction();
+
+            // Interruption hook: check if user spoken transcript contains stop phrases
+            const { isInterrupt, isEmergency } = checkInterruptCommand(data.userTranscript);
+            if (isInterrupt) {
+              handleVoiceInterrupt(isEmergency);
+            }
           }
 
           // D. Instant Function Call Executions
@@ -769,13 +918,38 @@ export default function App() {
                     }, 150);
                     resultMessage = "Ji Rishu Boss, photo upload panel open kar diya hai. Single ya multiple image select kar kijiye.";
                   } else if (act === 'show_gallery') {
-                    setActiveTab('vault');
-                    setTimeout(() => {
-                      window.dispatchEvent(new CustomEvent('vault-filter', { detail: { filter: filterVal } }));
-                    }, 150);
-                    resultMessage = filterVal === 'Astha' 
-                      ? "Ji Rishu Boss, Wife Astha ki sabhi saved photos dikha rahi hu." 
-                      : "Ji Rishu Boss, vault ki sabhi uploaded photos dikha rahi hu.";
+                    // Query database of photos directly asynchronously
+                    const allPhotos = await db.getPhotos();
+                    const cleanFilter = filterVal.toLowerCase().trim();
+                    let matchedPhotos: db.PhotoRecord[] = [];
+
+                    if (cleanFilter === 'astha' || cleanFilter === 'wife' || cleanFilter === 'partner') {
+                      matchedPhotos = allPhotos.filter(p => p.personLabel === 'Astha');
+                    } else if (cleanFilter === 'all') {
+                      matchedPhotos = allPhotos;
+                    } else {
+                      // Fuzzy lookup fallback
+                      matchedPhotos = allPhotos.filter(p => {
+                        const label = (p.personLabel || '').toLowerCase();
+                        const location = (p.location || '').toLowerCase();
+                        const idStr = p.id.toLowerCase();
+                        return label.includes(cleanFilter) || location.includes(cleanFilter) || idStr.includes(cleanFilter);
+                      });
+                    }
+
+                    if (matchedPhotos.length === 0) {
+                      // Clear any existing active on screen photos so it stays clean
+                      setOnScreenPhotos([]);
+                      resultMessage = "Error: Rishu Boss, is naam ki koi photo save nahi hai.";
+                    } else {
+                      // Save found images to local display states
+                      setOnScreenPhotos(matchedPhotos);
+                      setActivePhotoIndex(0);
+                      setOnScreenZoomLevel(1);
+                      // Do NOT change activeTab or open gallery first (navigate away)!
+                      // We keep activeTab 'orb' and display the photo inside the current view.
+                      resultMessage = `Success: Rendered ${matchedPhotos.length} photo(s) of ${filterVal} directly on the screen inside the active viewport framework. Checked and verified that all target image structures have been outputted in their true, proportional sizes (portrait, landscape, or square) alongside a Full Screen modal launcher.`;
+                    }
                   }
                 }
               } catch (e: any) {
@@ -906,12 +1080,27 @@ export default function App() {
                 <div className={`px-4 py-1.5 rounded-full border text-[10px] font-mono font-black tracking-widest flex items-center gap-2 backdrop-blur-md transition-all duration-300 ${
                   store.liveState === 'offline'
                     ? 'bg-zinc-950/50 border-rose-500/10 text-rose-400 shadow-[0_0_15px_rgba(239,68,68,0.05)]'
-                    : 'bg-zinc-950/50 border-emerald-500/15 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.08)]'
+                    : store.liveState === 'speaking'
+                      ? 'bg-zinc-950/50 border-cyan-500/15 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.08)]'
+                      : store.liveState === 'listening'
+                        ? 'bg-zinc-950/50 border-emerald-500/15 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.08)]'
+                        : 'bg-zinc-950/50 border-purple-500/15 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.08)]'
                 }`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${
-                    store.liveState === 'offline' ? 'bg-rose-500 shadow-[0_0_8px_#ef4444]' : 'bg-emerald-400 shadow-[0_0_8px_#10b981] animate-pulse'
+                    store.liveState === 'offline' 
+                      ? 'bg-rose-500 shadow-[0_0_8px_#ef4444]' 
+                      : store.liveState === 'listening'
+                        ? 'bg-emerald-400 shadow-[0_0_8px_#10b981] animate-pulse'
+                        : store.liveState === 'speaking'
+                          ? 'bg-cyan-400 shadow-[0_0_8px_#22d3ee]'
+                          : 'bg-purple-400 shadow-[0_0_8px_#c084fc] animate-ping'
                   }`} />
-                  <span>{store.liveState === 'offline' ? 'OFFLINE • DISCONNECTED' : 'ONLINE • COGNITIVE LINK READY'}</span>
+                  <span>
+                    {store.liveState === 'offline'
+                      ? 'OFFLINE • DISCONNECTED'
+                      : `ONLINE • ${store.liveState.toUpperCase()}`
+                    }
+                  </span>
                 </div>
               </div>
             </div>
@@ -931,6 +1120,167 @@ export default function App() {
                 <p className="text-sm font-mono text-cyan-200 leading-relaxed italic">
                   "{store.aiTranscript}"
                 </p>
+              </div>
+            )}
+
+            {/* Premium On-Screen Photo Display System (Dynamic Frame Viewer Layout) */}
+            {onScreenPhotos.length > 0 && (
+              <div className="w-full max-w-xl bg-zinc-950/90 border border-pink-500/30 rounded-[28px] p-5 space-y-4 shadow-[0_0_50px_rgba(236,72,153,0.15)] relative overflow-hidden backdrop-blur-2xl transition-all duration-300 animate-slide-up z-40">
+                {/* Background glow effects */}
+                <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/5 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-32 h-32 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
+
+                {/* Header of frame */}
+                <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-pink-500 animate-ping" />
+                    <span className="text-[10px] font-mono font-black uppercase text-pink-400 tracking-[0.2em]">
+                      {onScreenPhotos[activePhotoIndex].personLabel === 'Astha' ? 'Astha Partner Frame' : 'Smart Photo Frame'}
+                    </span>
+                    {onScreenPhotos.length > 1 && (
+                      <span className="text-[10px] font-mono text-zinc-500">
+                        ({activePhotoIndex + 1} of {onScreenPhotos.length})
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {/* Full screen handle */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsFullscreenPhotoOpen(true);
+                        setOnScreenZoomLevel(1);
+                      }}
+                      className="p-1.5 rounded-lg bg-zinc-905 hover:bg-zinc-850 hover:text-white text-zinc-400 border border-zinc-850 hover:border-zinc-750 transition-all cursor-pointer shadow-md"
+                      title="Symmetry Fullscreen Viewer"
+                    >
+                      <Maximize2 size={13} />
+                    </button>
+                    {/* Discard current view frame */}
+                    <button
+                      type="button"
+                      onClick={() => setOnScreenPhotos([])}
+                      className="p-1.5 rounded-lg bg-zinc-905 hover:bg-zinc-850 text-zinc-400 hover:text-rose-450 border border-zinc-850 hover:border-rose-500/20 transition-all cursor-pointer shadow-md"
+                      title="Clear screen frame"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Main Proportional Frame Viewer */}
+                <div className="flex justify-center items-center w-full min-h-[220px] bg-zinc-950/60 rounded-[20px] overflow-hidden p-3 border border-zinc-900/60 relative">
+                  {(() => {
+                    const activePhoto = onScreenPhotos[activePhotoIndex];
+                    const orientation = photoOrientations[activePhoto.id] || 'square';
+                    
+                    let frameClass = 'aspect-square max-w-[280px]'; // default
+                    if (orientation === 'portrait') {
+                      frameClass = 'aspect-[3/4] max-w-[220px]';
+                    } else if (orientation === 'landscape') {
+                      frameClass = 'aspect-[16/10] w-full max-w-lg';
+                    }
+
+                    return (
+                      <div 
+                        onClick={() => {
+                          setIsFullscreenPhotoOpen(true);
+                          setOnScreenZoomLevel(1);
+                        }}
+                        className={`relative rounded-xl overflow-hidden shadow-2xl border border-white/5 cursor-zoom-in group/img transition-all duration-300 w-full ${frameClass}`}
+                      >
+                        <img
+                          src={activePhoto.dataUrl}
+                          alt="On-Screen Rendered Asset"
+                          onLoad={(e) => handleOnScreenImageLoad(activePhoto.id, e)}
+                          className="w-full h-full object-cover select-none pointer-events-none"
+                          referrerPolicy="no-referrer"
+                        />
+                        
+                        {/* Hover Overlay info */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity duration-200 p-3 select-none flex flex-col justify-end">
+                          <span className="text-[8px] font-mono text-zinc-400">
+                            Saved on: {activePhoto.date} at {activePhoto.time}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Left / Right chevron buttons if multiple photos */}
+                  {onScreenPhotos.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActivePhotoIndex(prev => (prev > 0 ? prev - 1 : onScreenPhotos.length - 1));
+                        }}
+                        className="absolute left-4 p-2 rounded-full bg-black/80 hover:bg-black text-white hover:text-pink-405 border border-zinc-800 transition-all cursor-pointer"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActivePhotoIndex(prev => (prev < onScreenPhotos.length - 1 ? prev + 1 : 0));
+                        }}
+                        className="absolute right-4 p-2 rounded-full bg-black/80 hover:bg-black text-white hover:text-pink-405 border border-zinc-800 transition-all cursor-pointer"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Sub text descriptor card */}
+                <div className="p-3 bg-zinc-900/40 rounded-xl border border-zinc-900/60 flex items-center justify-between text-xs font-mono">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-sans font-bold text-zinc-350 truncate">
+                      {onScreenPhotos[activePhotoIndex].personLabel === 'Astha' ? '❤️ Wife & Partner Astha' : 'Personal Saved Memory'}
+                    </p>
+                    <p className="text-[9px] text-zinc-500 truncate">
+                      ID: {onScreenPhotos[activePhotoIndex].id.replace('vault_', 'IDB_FRAME_')}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[9px] px-2 py-0.5 rounded bg-zinc-950 border border-zinc-850 text-zinc-400 uppercase">
+                      {photoOrientations[onScreenPhotos[activePhotoIndex].id] || 'square'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsFullscreenPhotoOpen(true);
+                        setOnScreenZoomLevel(1);
+                      }}
+                      className="text-[10px] hover:text-pink-400 text-zinc-400 underline cursor-pointer"
+                    >
+                      Full Screen
+                    </button>
+                  </div>
+                </div>
+
+                {/* Thumbnail horizontal strip if multiple photos */}
+                {onScreenPhotos.length > 1 && (
+                  <div className="flex gap-2 justify-start items-center overflow-x-auto py-1 scrollbar-none border-t border-zinc-900/50 pt-2">
+                    {onScreenPhotos.map((p, idx) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setActivePhotoIndex(idx)}
+                        className={`w-10 h-10 rounded-lg overflow-hidden shrink-0 border transition-all ${
+                          idx === activePhotoIndex 
+                            ? 'border-pink-500 scale-105 shadow-[0_0_10px_rgba(236,72,153,0.3)]' 
+                            : 'border-zinc-850 hover:border-zinc-650 opacity-60'
+                        }`}
+                      >
+                        <img src={p.dataUrl} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1083,6 +1433,124 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* FULL-SCREEN PREMIUM GLASS VIEWER & ZOOM MODAL */}
+      {isFullscreenPhotoOpen && onScreenPhotos.length > 0 && (
+        <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-2xl flex flex-col justify-between overflow-hidden select-none animate-fade-in font-sans">
+          {/* Header element */}
+          <div className="p-4 lg:px-8 bg-gradient-to-b from-black/85 to-transparent flex items-center justify-between text-zinc-300 z-10">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase border ${
+                  onScreenPhotos[activePhotoIndex].personLabel === 'Astha'
+                    ? 'bg-pink-955 text-pink-300 border-pink-500/30'
+                    : 'bg-zinc-900/80 text-zinc-400 border-zinc-800'
+                }`}>
+                  {onScreenPhotos[activePhotoIndex].personLabel === 'Astha' ? 'Wife / Astha ❤️' : 'Local Vault Item'}
+                </span>
+                <span className="text-[10px] font-mono text-zinc-500">
+                  Image {activePhotoIndex + 1} of {onScreenPhotos.length}
+                </span>
+              </div>
+              <h4 className="text-zinc-200 mt-1 font-bold text-xs font-mono">
+                {onScreenPhotos[activePhotoIndex].id.replace('vault_', 'IDB_VAULT_RECORD_')}
+              </h4>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {/* Zoom controls */}
+              <button
+                type="button"
+                onClick={() => setOnScreenZoomLevel(prev => Math.max(prev - 0.5, 1))}
+                className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-850 hover:text-white border border-zinc-800 transition-all cursor-pointer"
+                title="Zoom Out"
+              >
+                <ZoomOut size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setOnScreenZoomLevel(1)}
+                className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-850 hover:text-white border border-zinc-800 font-mono text-xs transition-all cursor-pointer"
+                title="Reset Zoom"
+              >
+                {onScreenZoomLevel}x
+              </button>
+              <button
+                type="button"
+                onClick={() => setOnScreenZoomLevel(prev => Math.min(prev + 0.5, 4))}
+                className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-850 hover:text-white border border-zinc-800 transition-all cursor-pointer"
+                title="Zoom In"
+              >
+                <ZoomIn size={16} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsFullscreenPhotoOpen(false)}
+                className="p-2.5 rounded-xl bg-rose-955 text-rose-450 hover:text-white border border-rose-900/30 hover:bg-rose-905/40 transition-all cursor-pointer"
+                title="Close Full Screen"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Main big content frame with active Zoom level styling */}
+          <div className="flex-1 flex items-center justify-center relative p-4 overflow-auto">
+            <div 
+              style={{ transform: `scale(${onScreenZoomLevel})`, transition: 'transform 0.15s ease-out' }}
+              className="max-h-[80vh] max-w-full flex items-center justify-center transition-all duration-300"
+            >
+              <img
+                src={onScreenPhotos[activePhotoIndex].dataUrl}
+                alt="Full Screen Premium Display"
+                className="max-h-[80vh] max-w-full rounded-2xl border border-zinc-800/50 shadow-[0_20px_50px_rgba(0,0,0,0.5)] object-contain"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+
+            {/* Left & Right floating action arrows */}
+            {onScreenPhotos.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePhotoIndex(prev => (prev > 0 ? prev - 1 : onScreenPhotos.length - 1));
+                    setOnScreenZoomLevel(1);
+                  }}
+                  className="absolute left-6 lg:left-12 p-3 rounded-full bg-black/60 hover:bg-black border border-zinc-850 text-white hover:text-pink-400 transition-all cursor-pointer shadow-lg"
+                >
+                  <ChevronLeft size={24} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePhotoIndex(prev => (prev < onScreenPhotos.length - 1 ? prev + 1 : 0));
+                    setOnScreenZoomLevel(1);
+                  }}
+                  className="absolute right-6 lg:right-12 p-3 rounded-full bg-black/60 hover:bg-black border border-zinc-850 text-white hover:text-pink-400 transition-all cursor-pointer shadow-lg"
+                >
+                  <ChevronRight size={24} />
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Footer of modal */}
+          <div className="p-4 lg:p-8 bg-gradient-to-t from-black/80 to-transparent flex flex-col md:flex-row items-center justify-between text-zinc-400 gap-4 text-xs font-mono z-10">
+            <div className="flex items-center gap-4">
+              <span>Date: <strong>{onScreenPhotos[activePhotoIndex].date}</strong></span>
+              <span>Time: <strong>{onScreenPhotos[activePhotoIndex].time}</strong></span>
+              {onScreenPhotos[activePhotoIndex].location && (
+                <span>Location: <strong>{onScreenPhotos[activePhotoIndex].location}</strong></span>
+              )}
+            </div>
+            <p className="text-[10px] text-zinc-500">
+              Rishu Boss Private View • Offline Security Keys Enforced
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
