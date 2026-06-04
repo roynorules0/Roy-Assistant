@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: roy-girl-ai-voice-assistant
+    runtime: node
+    repo: https://github.com/your-username/roy-girl-ai
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: NODE_ENV
+        value: production
