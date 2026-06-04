@@ -149,6 +149,21 @@ export interface AppState {
   // Diagnostics update
   updateDiagnostics: () => void;
   updatePermissions: () => Promise<void>;
+
+  // Dedicated Story Mode State
+  storyState: {
+    isActive: boolean;
+    isPaused: boolean;
+    title: string;
+    type: string;
+    currentChapter: number;
+    totalChapters: number;
+    durationMinutes: string;
+    narrationTranscript: string;
+    chaptersHistory: { chapter: number; title: string; content: string }[];
+  };
+  setStoryState: (state: Partial<AppState['storyState']>) => void;
+  resetStoryState: () => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -225,6 +240,35 @@ export const useAppStore = create<AppState>((set, get) => ({
   capturedPhotos: [],
   reviewPhoto: null,
 
+  storyState: (() => {
+    try {
+      const stored = localStorage.getItem('__roy_storyState');
+      return stored ? JSON.parse(stored) : {
+        isActive: false,
+        isPaused: false,
+        title: '',
+        type: '',
+        currentChapter: 1,
+        totalChapters: 3,
+        durationMinutes: '15m',
+        narrationTranscript: '',
+        chaptersHistory: []
+      };
+    } catch {
+      return {
+        isActive: false,
+        isPaused: false,
+        title: '',
+        type: '',
+        currentChapter: 1,
+        totalChapters: 3,
+        durationMinutes: '15m',
+        narrationTranscript: '',
+        chaptersHistory: []
+      };
+    }
+  })(),
+
   setApiKey: (key) => {
     localStorage.setItem('__roy_apiKey', key);
     set({ apiKey: key });
@@ -247,6 +291,27 @@ export const useAppStore = create<AppState>((set, get) => ({
   setUserTranscript: (userTranscript) => set({ userTranscript }),
   setAiTranscript: (aiTranscript) => set({ aiTranscript }),
   setConnectionError: (connectionError) => set({ connectionError }),
+
+  setStoryState: (state) => {
+    const updated = { ...get().storyState, ...state };
+    localStorage.setItem('__roy_storyState', JSON.stringify(updated));
+    set({ storyState: updated });
+  },
+  resetStoryState: () => {
+    const defaultState = {
+      isActive: false,
+      isPaused: false,
+      title: '',
+      type: '',
+      currentChapter: 1,
+      totalChapters: 3,
+      durationMinutes: '15m',
+      narrationTranscript: '',
+      chaptersHistory: []
+    };
+    localStorage.setItem('__roy_storyState', JSON.stringify(defaultState));
+    set({ storyState: defaultState });
+  },
 
   setCreatorSettings: (settings) => {
     localStorage.setItem('__roy_assistantName', settings.assistantName);

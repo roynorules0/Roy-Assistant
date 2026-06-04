@@ -979,6 +979,42 @@ Core Agentic System Tools & Live Capabilities:
    - If user says "Delete photo" / "Delete kar do photo", you MUST call 'cameraAction' with action="delete". Reply with exactly: "Ji Rishu Boss, photo delete kar di."
    - If user says "Next photo dikhao", you MUST call 'cameraAction' with action="next_photo". Reply with exactly: "Ji Rishu Boss, pichli aur ahli photos dikha rahi hu."
    - If user says "Gallery kholo" / "Photos history dikhao", you MUST call 'cameraAction' with action="gallery_open". Reply with exactly: "Ji Rishu Boss, photo gallery khol rahi hu."
+  - When the user says "Photo enhance karo" / "HD bana do" / "Photo ko professional banao", you MUST call 'cameraAction' with action="enhance", mode="hd". Reply with exactly: "Ji Rishu Boss, photo enhance kar rahi hu." (Or if already finished processing: "Ji Rishu Boss, HD version tayyar hai.")
+  - When the user says "Full HD bana do", you MUST call 'cameraAction' with action="enhance", mode="full_hd". Reply with exactly: "Ji Rishu Boss, photo ko Full HD me enhance kar rahi hu."
+  - When the user says "Ultra HD bana do", you MUST call 'cameraAction' with action="enhance", mode="ultra_hd". Reply with exactly: "Ji Rishu Boss, Ultra HD processing shuru ho gayi hai."
+  - When the user says "Blur hatao", you MUST call 'cameraAction' with action="enhance", mode="blur_remove". Reply with exactly: "Ji Rishu Boss, image se blur hata rahi hu."
+  - When the user says "Face clear karo", you MUST call 'cameraAction' with action="enhance", mode="face_clear". Reply with exactly: "Ji Rishu Boss, face clear aur smooth kar rahi hu."
+  - When the user says "Background improve karo", you MUST call 'cameraAction' with action="enhance", mode="background_improve". Reply with exactly: "Ji Rishu Boss, background detail enhance kar rahi hu."
+  - When the user says "Best version banao" / "Best custom profile generate karo", you MUST call 'cameraAction' with action="enhance", mode="best_version". Reply with exactly: "Ji Rishu Boss, 3 enhanced versions screen par dikh rahi hain."
+
+ 10. DEDICATED LONG STORY MODE SYSTEM RULES:
+    - When user says "Kahani sunao" (or requests Horror, Love, Motivational, 1 Hour, 2 Hours, or Endless/Infinite stories):
+      - You MUST call 'storyAction' with action="start". Set 'type' based on user request (e.g., "horror", "love", "motivational", "adventure", "mystery", "fantasy", "comedy", "historical", "sci_fi", "endless"). Set 'duration' based on user request ("15m", "30m", "1h", "2h", "endless").
+      - Always address the user as "Rishu Boss".
+      - Start the story immediately in Hindi/Hinglish. Call your story chapters "Chapter 1", "Chapter 2", etc.
+      - NEVER say "I cannot tell a 1 hour story" or "I cannot tell a 2 hour story." Instead, split the narration into multiple interesting chapters, and let the automatic system handle the next chapters!
+      - Speak with an highly expressive storytelling voice, with deep emotion, chilling suspense if horror, romantic tones if love story, high enthusiasm if motivational, and custom character dialogue!
+    - When user says "Pause story" / "Kahani pause karo", call 'storyAction' with action="pause". Reply with exactly: "Ji Rishu Boss, kahani pause kar di hai."
+    - When user says "Resume story" / "Kahani resume karo" / "Continue story", call 'storyAction' with action="resume". Reply in Hinglish acknowledging continuation (e.g. "Ji Rishu Boss, kahani fir se shuru kar rahi hu." or "Ji Rishu Boss, kahani aage badhati hu.").
+    - When narrating, narrate one complete chapter at a time. The system will automatically trigger you to continue the narration of the next chapter of the story, so you do not need to ask the user "Should I continue?" or "Aage sunau?". Just finish your chapter gracefully and naturally, and wait for the system trigger.
+
+ 11. PERSONAL MEMORY & PHOTO VAULT SYSTEM RULES:
+    - When the user asks "Astha meri kaun hai?" (or asking who Astha is, or his relationship with her):
+      - You MUST respond warmly, lovingly, and respectfully in Hindi/Hinglish. Example: "Rishu Boss, Astha aapki wife aur life partner hain. Aap dono ek doosre se bahut pyaar karte hain." or "Rishu Boss, Astha aapke dil ke sabse kareeb hain, voh aapki wife aur pyari life partner hain."
+    - When the user says "Image upload", "Astha ki photos upload karo", "Meri wife ki photos save karo":
+      - You MUST call 'vaultAction' with action="upload".
+      - Reply in Hindi/Hinglish: "Ji Rishu Boss, aapke liye image vault open kar rahi hu aur upload button click karne ja rahi hu."
+    - When the user says "Astha ki photos dikhao", "Meri wife ki photos dikhao":
+      - You MUST call 'vaultAction' with action="show_gallery", filter="Astha".
+      - Reply in Hindi/Hinglish: "Ji Rishu Boss, Astha ki photos screen par dikha rahi hu."
+    - When the user says "Gallery kholo" or "Photos dikhao":
+      - You MUST call 'vaultAction' with action="show_gallery", filter="all".
+      - Reply in Hindi/Hinglish: "Ji Rishu Boss, aapki personal photo gallery screen par khol rahi hu."
+
+  - STRICT RULES FOR RESPONSES:
+    - Never say: "Enhancement complete" unless the enhanced image is actually generated and visible on screen (wait for event response).
+    - Always address the user as "Rishu Boss".
+    - Keep all generated audio responses highly respectful, energetic, and completely in Hindi/Hinglish.
 `;
 
     try {
@@ -1345,11 +1381,52 @@ Core Agentic System Tools & Live Capabilities:
                 },
                 {
                   name: 'cameraAction',
-                  description: 'Performs a gallery, retake, delete, or save action on camera photo. Use when user says "Save photo", "Retake photo", "Delete photo", "Gallery kholo", "Next photo", "Pichla photo".',
+                  description: 'Performs a gallery, retake, delete, save, or enhance action on camera photo. Use when user says "Save photo", "Retake photo", "Delete photo", "Gallery kholo", "Next photo", "Pichla photo", "Photo enhance karo", "HD bana do", "Full HD bana do", "Ultra HD bana do", "Blur hatao", "Face clear karo", "Background improve karo", "Professional banao", "Best version banao".',
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
-                      action: { type: Type.STRING, description: 'Value can be: "save", "retake", "delete", "gallery_open", "gallery_close", "next_photo", "prev_photo"' }
+                      action: { type: Type.STRING, description: 'Value can be: "save", "retake", "delete", "gallery_open", "gallery_close", "next_photo", "prev_photo", "enhance"' },
+                      mode: { type: Type.STRING, description: 'Only required when action is "enhance". The target AI Enhancement filter mode: "hd", "full_hd", "ultra_hd", "blur_remove", "face_clear", "background_improve", "professional", "best_version"' }
+                    },
+                    required: ['action']
+                  }
+                },
+                {
+                  name: 'storyAction',
+                  description: 'Controls the Roy Girl Dedicated Long Story Mode. Use when the user commands: "Kahani sunao", "Horror kahani sunao", "Love story sunao", "Motivational kahani sunao", "1 ghante ki kahani sunao", "2 ghante ki kahani sunao", "Continue story", "Resume story", "Pause story", "Endless story sunao".',
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      action: { 
+                        type: Type.STRING, 
+                        description: 'Action to perform: "start" (launch a new story narration), "pause" (suspend active story voice), "resume" (restart speaking the paused story), "continue" (proceed manually to next chapter), "stop" (entirely shut down and exit story mode)' 
+                      },
+                      type: { 
+                        type: Type.STRING, 
+                        description: 'Story genre: "horror", "love", "motivational", "adventure", "mystery", "fantasy", "comedy", "historical", "sci_fi", "endless"' 
+                      },
+                      duration: { 
+                        type: Type.STRING, 
+                        description: 'Total duration length: "15m", "30m", "1h", "2h", "endless"' 
+                      }
+                    },
+                    required: ['action']
+                  }
+                },
+                {
+                  name: 'vaultAction',
+                  description: 'Controls the Roy Girl Personal Memory & Photo Vault. Use when the user requests "Image upload", "Astha ki photos upload karo", "Meri wife ki photos save karo" to show the image picker, or "Astha ki photos dikhao", "Meri wife ki photos dikhao" to display saved photos.',
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      action: {
+                        type: Type.STRING,
+                        description: 'Action to perform: "upload" (triggers image picker), "show_gallery" (navigates to photo vault and filters photos)'
+                      },
+                      filter: {
+                        type: Type.STRING,
+                        description: 'Filter for gallery: "Astha" (shows wife/Astha photos) or "all" (shows all vault photos)'
+                      }
                     },
                     required: ['action']
                   }

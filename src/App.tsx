@@ -9,13 +9,15 @@ import TelegramPublisher from './components/TelegramPublisher';
 import YouTubePlayer from './components/YouTubePlayer';
 import YouTubeMediaHub from './components/YouTubeMediaHub';
 import CameraSystem from './components/CameraSystem';
+import StoryMode from './components/StoryMode';
+import VaultTab from './components/VaultTab';
 import { 
-  Mic, MicOff, Power, PowerOff, Settings as SettingsIcon, LayoutDashboard, Sparkles, User, Info, MessageSquare, ShieldCheck, Share2, Send, Youtube, Disc, ListMusic, Camera
+  Mic, MicOff, Power, PowerOff, Settings as SettingsIcon, LayoutDashboard, Sparkles, User, Info, MessageSquare, ShieldCheck, Share2, Send, Youtube, Disc, ListMusic, Camera, BookOpen, FolderHeart, X
 } from 'lucide-react';
 
 export default function App() {
   const store = useAppStore();
-  const [activeTab, setActiveTab] = useState<'orb' | 'dashboard' | 'settings' | 'telegram' | 'youtube' | 'camera'>('orb');
+  const [activeTab, setActiveTab] = useState<'orb' | 'dashboard' | 'settings' | 'telegram' | 'youtube' | 'camera' | 'story' | 'vault'>('orb');
   const wsRef = useRef<WebSocket | null>(null);
   const currentAiUtterance = useRef('');
   const currentUserUtterance = useRef('');
@@ -23,6 +25,7 @@ export default function App() {
   const [textInputValue, setTextInputValue] = useState('');
   const [isSubmittingText, setIsSubmittingText] = useState(false);
   const pendingTextRef = useRef<string>('');
+  const [chatVisible, setChatVisible] = useState(false);
 
   // Commit utterances logic
   const commitUserUtterance = async () => {
@@ -37,6 +40,23 @@ export default function App() {
     const text = currentAiUtterance.current.trim();
     if (text) {
       await store.addConversationMessage('model', text);
+
+      if (store.storyState.isActive && !store.storyState.isPaused) {
+        const curChap = store.storyState.currentChapter;
+        const exists = store.storyState.chaptersHistory.some(c => c.chapter === curChap);
+        if (!exists && text.length > 20) {
+          const newHist = [
+            ...store.storyState.chaptersHistory,
+            {
+              chapter: curChap,
+              title: `Chapter ${curChap}: ${store.storyState.title}`,
+              content: text
+            }
+          ];
+          store.setStoryState({ chaptersHistory: newHist });
+        }
+      }
+
       currentAiUtterance.current = '';
     }
   };
@@ -121,6 +141,7 @@ export default function App() {
           } else if (now - silenceStart > 900) { // 900ms natural word gap hangover window
             store.setLiveState('listening');
             silenceStart = 0;
+            window.dispatchEvent(new CustomEvent('speech-finished'));
           }
         }
       }
@@ -152,6 +173,64 @@ export default function App() {
       setActiveTab('orb');
     }
   }, [store.activeVideo]);
+
+  // Long Story Mode Orchestration Event Handlers
+  useEffect(() => {
+    const handleStoryCommand = async (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { action, payload } = customEvent.detail || {};
+
+      if (store.liveState === 'offline') {
+        store.setStoryState({ narrationTranscript: 'Initializing voice connection to start narrative saga...' });
+        await toggleConnection();
+        // Hold for 3 seconds to guarantee websocket connection
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        if (action === 'start') {
+          wsRef.current.send(JSON.stringify({ text: `Rishu Boss requests: "${payload.prompt}". Start a brand new storytelling session. Call tool storyAction with action="start".` }));
+        } else if (action === 'send-text') {
+          wsRef.current.send(JSON.stringify({ text: payload.text }));
+        }
+      }
+    };
+
+    const handleSpeechFinished = () => {
+      if (store.storyState.isActive && !store.storyState.isPaused) {
+        const { currentChapter, totalChapters, title } = store.storyState;
+        
+        if (currentChapter >= totalChapters) {
+          store.resetStoryState();
+          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ 
+              text: `Rishu Boss, pure ${totalChapters} chapters ki chuni hui story khatam ho chuki hai. Acknowledge and congratulate Rishu Boss on completing the saga elegantly in Hinglish!` 
+            }));
+          }
+        } else {
+          const nextChap = currentChapter + 1;
+          store.setStoryState({ 
+            currentChapter: nextChap,
+            narrationTranscript: 'Transitioning timeline, writing story parchment live...'
+          });
+
+          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ 
+              text: `System Command: Move on immediately to narrate Chapter ${nextChap} of the story titled '${title}' in Hindi/Hinglish now. Be highly expressive, maintain the flow and continuity, and start narrating the next events of the saga naturally without any introductions or meta questions.` 
+            }));
+          }
+        }
+      }
+    };
+
+    window.addEventListener('story-command', handleStoryCommand);
+    window.addEventListener('speech-finished', handleSpeechFinished);
+
+    return () => {
+      window.removeEventListener('story-command', handleStoryCommand);
+      window.removeEventListener('speech-finished', handleSpeechFinished);
+    };
+  }, [store.storyState, store.liveState, store.apiKey]);
 
   // Connects or disconnects the Gemini Live WebSocket session
   const toggleConnection = async () => {
@@ -249,6 +328,10 @@ export default function App() {
             }
             store.setAiTranscript(data.aiTranscript);
             currentAiUtterance.current = data.aiTranscript;
+
+            if (store.storyState.isActive && !store.storyState.isPaused) {
+              store.setStoryState({ narrationTranscript: data.aiTranscript });
+            }
           }
 
           // C2. User spoken input live transcription
@@ -613,6 +696,87 @@ export default function App() {
                   } else {
                     resultMessage = `Action ${action} processed.`;
                   }
+                } else if (name === 'storyAction') {
+                  const act = args.action;
+                  const type = args.type || 'horror';
+                  const duration = args.duration || '15m';
+
+                  if (act === 'start') {
+                    const titles: Record<string, string[]> = {
+                      horror: ["Shaitani Haveli Ka Raaz", "The Midnight Ghost Bride", "Pichal Pairi Ki Aahat", "The Blood Moon Graveyard"],
+                      love: ["Teri Meri Adhoori Dastan", "Golden Sunset Bridge", "Do Dilon Ka Sangam", "High-School Love Symphony"],
+                      motivational: ["Rishu Boss Ka Sangharsh", "Never Quit Hustle Saga", "Zero Se Hero Dastan", "The Ultimate Pacer"],
+                      adventure: ["Khoya Hua Mandir", "Ancient Jungle Crypt", "Sahara Desert Quest", "The Lost Atlantis Shield"],
+                      mystery: ["Teesri Nishani Ka Raaz", "Murder At Midnight Court", "The Silent Witness Clues", "The Shadow Tracker"],
+                      fantasy: ["Pariyon Ka Sunehra Desh", "Golden Phoenix Prophecy", "Magic Quest of Rawland", "The Immortal Sword"],
+                      comedy: ["Rishu Aur Pappu Ki Panga", "The Hilarious Marriage Mixup", "Crazy Tech Support Fiasco", "Gunda Bhediya Comedy Show"],
+                      historical: ["Mewar Ke Veer Yoddha", "Taj Mahal Secret Tunnel", "Chhatrapati Veer Ki Swords", "Chronicles of Akbar Legacy"],
+                      sci_fi: ["Black Hole Protocol X", "The AI Takeover Doom", "Neon Star Odyssey", "Hyper-Sleep Time Paradox"],
+                      endless: ["Anant Antriksh Ki Kahani", "The Endless Time Loop Journeys", "The Everlasting Mystic Tales", "Cosmic Voyage Chronicle"]
+                    };
+                    const list = titles[type] || titles.horror;
+                    const randomTitle = list[Math.floor(Math.random() * list.length)];
+
+                    store.setStoryState({
+                      isActive: true,
+                      isPaused: false,
+                      title: randomTitle,
+                      type: type,
+                      currentChapter: 1,
+                      totalChapters: duration === '30m' ? 6 : duration === '1h' ? 12 : duration === '2h' ? 24 : duration === 'endless' ? 999 : 3,
+                      durationMinutes: duration,
+                      narrationTranscript: '',
+                      chaptersHistory: []
+                    });
+                    setActiveTab('story');
+                    resultMessage = `Story mode started. Narrating Chapter 1 of the story: "${randomTitle}" in Hindi/Hinglish now. Keep the narration highly engaging, suspensful if horror, and respectful to Rishu Boss.`;
+                  } else if (act === 'pause') {
+                    store.setStoryState({ isPaused: true });
+                    voiceEngine.interrupt();
+                    resultMessage = "Ji Rishu Boss, kahani pause kar di hai.";
+                  } else if (act === 'resume') {
+                    store.setStoryState({ isPaused: false });
+                    resultMessage = "Ji Rishu Boss, kahani aage badh rahi hai.";
+                  } else if (act === 'continue') {
+                    const current = store.storyState.currentChapter;
+                    const total = store.storyState.totalChapters;
+                    if (current < total) {
+                      store.setStoryState({ 
+                        currentChapter: current + 1,
+                        narrationTranscript: ''
+                      });
+                      resultMessage = `Transitioning to Chapter ${current + 1} narration immediately.`;
+                    } else {
+                      store.resetStoryState();
+                      resultMessage = "Rishu Boss, kahani poori ho chuki hai. Dhanyawad!";
+                    }
+                  } else if (act === 'stop') {
+                    store.resetStoryState();
+                    voiceEngine.interrupt();
+                    resultMessage = "Story mode exited and reset completely.";
+                  }
+                } else if (name === 'vaultAction') {
+                  const act = args.action;
+                  const filterVal = args.filter || 'all';
+
+                  if (act === 'upload') {
+                    setActiveTab('vault');
+                    setTimeout(() => {
+                      const picker = document.getElementById('vault-file-picker');
+                      if (picker) {
+                        picker.click();
+                      }
+                    }, 150);
+                    resultMessage = "Ji Rishu Boss, photo upload panel open kar diya hai. Single ya multiple image select kar kijiye.";
+                  } else if (act === 'show_gallery') {
+                    setActiveTab('vault');
+                    setTimeout(() => {
+                      window.dispatchEvent(new CustomEvent('vault-filter', { detail: { filter: filterVal } }));
+                    }, 150);
+                    resultMessage = filterVal === 'Astha' 
+                      ? "Ji Rishu Boss, Wife Astha ki sabhi saved photos dikha rahi hu." 
+                      : "Ji Rishu Boss, vault ki sabhi uploaded photos dikha rahi hu.";
+                  }
                 }
               } catch (e: any) {
                 resultMessage = `Error executing browser layout action: ${e.message}`;
@@ -683,318 +847,238 @@ export default function App() {
     voiceEngine.setMute(nextMuted);
   };
 
+  const getModuleLabel = () => {
+    if (activeTab === 'settings') return 'Configuration Settings';
+    if (activeTab === 'vault') return 'Secret Photo Vault & Gallery';
+    if (activeTab === 'story') return 'Long Story Mode';
+    if (activeTab === 'telegram') return 'Telegram Integration Hub';
+    if (activeTab === 'dashboard') return 'Interactive Dashboard';
+    if (activeTab === 'orb') {
+      if (store.activeVideo) return 'Video & Music Player';
+      if (store.cameraActive) return 'Smart Camera System';
+    }
+    return 'Voice Cognition Hub';
+  };
+
+  const handleCloseActiveModule = () => {
+    if (store.cameraActive) {
+      store.setCameraActive(false);
+      window.dispatchEvent(new CustomEvent('camera-command', { detail: { action: 'close' } }));
+    }
+    if (store.activeVideo) {
+      store.setActiveVideo(null);
+      store.setPlayerState('stopped');
+    }
+    setActiveTab('orb');
+  };
+
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
-      {/* 1. Header Navigation Deck */}
-      <header className="border-b border-zinc-900/80 bg-zinc-950/80 backdrop-blur-md sticky top-0 z-30 select-none">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 to-fuchsia-500 flex items-center justify-center font-mono font-bold text-xs shadow-[0_0_15px_rgba(6,182,212,0.4)]">
-                R
-              </div>
-              <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-zinc-950 animate-pulse" />
-            </div>
-            <div>
-              <h1 className="text-sm font-mono tracking-widest font-black text-white uppercase flex items-center gap-1.5">
-                {store.assistantName}
-                <span className="text-[9px] bg-cyan-950 text-cyan-300 font-mono font-normal tracking-wide px-1.5 py-0.2 rounded border border-cyan-800/50">
-                  LIVE GEN
-                </span>
-              </h1>
-              <p className="text-[10px] text-zinc-500 font-mono tracking-wider">
-                CREATED & OWNED BY <strong className="text-zinc-400 font-medium">{store.creatorName}</strong>
-              </p>
-            </div>
-          </div>
-
-          <div className="flex gap-1">
-            <button
-              onClick={() => setActiveTab('orb')}
-              className={`p-2.5 rounded-xl transition-all cursor-pointer ${
-                activeTab === 'orb' 
-                  ? 'bg-zinc-900 text-cyan-400 border border-zinc-800' 
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40'
-              }`}
-              title="Interactive Voice Core"
-            >
-              <Sparkles size={18} />
-            </button>
-
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`p-2.5 rounded-xl transition-all cursor-pointer ${
-                activeTab === 'dashboard' 
-                  ? 'bg-zinc-900 text-amber-400 border border-zinc-800' 
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40'
-              }`}
-              title="Dashboard System"
-            >
-              <LayoutDashboard size={18} />
-            </button>
-
-             <button
-              onClick={() => setActiveTab('telegram')}
-              className={`p-2.5 rounded-xl transition-all cursor-pointer ${
-                activeTab === 'telegram' 
-                  ? 'bg-zinc-900 text-cyan-455 border border-zinc-800' 
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40'
-              }`}
-              title="Telegram Integration Hub"
-            >
-              <Send size={18} className="translate-y-[0px] rotate-[-12deg] text-cyan-400" />
-            </button>
-
-            <button
-              onClick={() => setActiveTab('youtube')}
-              className={`p-2.5 rounded-xl transition-all cursor-pointer ${
-                activeTab === 'youtube' 
-                  ? 'bg-zinc-900 text-rose-500 border border-zinc-800' 
-                  : 'text-zinc-400 hover:text-rose-450 hover:bg-zinc-900/40'
-              }`}
-              title="YouTube Media Hub"
-            >
-              <Youtube size={18} className="text-rose-500" />
-            </button>
-
-            <button
-              onClick={() => setActiveTab('camera')}
-              className={`p-2.5 rounded-xl transition-all cursor-pointer ${
-                activeTab === 'camera' 
-                  ? 'bg-zinc-900 text-rose-450 border border-zinc-800' 
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40'
-              }`}
-              title="Smart Camera Hub"
-            >
-              <Camera size={18} className="text-rose-400 animate-pulse" />
-            </button>
-
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`p-2.5 rounded-xl transition-all cursor-pointer ${
-                activeTab === 'settings' 
-                  ? 'bg-zinc-900 text-fuchsia-400 border border-zinc-800' 
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40'
-              }`}
-              title="Settings Config"
-            >
-              <SettingsIcon size={18} />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* 2. Main Space Layout */}
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-pink-500/30 selection:text-pink-200">
+      
+      {/* Dynamic Main Workspace Rendering */}
       <main className="flex-1 flex flex-col justify-start relative">
-        {/* TAB 1: Core AI Voice Orb */}
-        <div className={`flex-1 w-full flex flex-col justify-start ${activeTab === 'orb' ? '' : 'hidden'}`}>
-          <div className="flex-1 max-w-4xl mx-auto w-full px-4 py-8 flex flex-col justify-center gap-6">
+        
+        {/* DEFAULT VOICE-FIRST VIEW */}
+        {activeTab === 'orb' && !store.activeVideo && !store.cameraActive ? (
+          <div className="flex-1 flex flex-col justify-between items-center max-w-4xl mx-auto w-full px-4 py-12 md:py-16 gap-8">
             
-            {/* Visual core containing responsive speech orb */}
-            <div className="flex-1 flex flex-col justify-center items-center w-full relative">
-              {store.musicMode && !store.activeVideo && (
-                <div className="absolute top-1 border border-rose-900 bg-rose-950/30 text-rose-400 px-3 py-1 rounded-full text-[11px] font-mono tracking-widest uppercase font-black flex items-center gap-1.5 animate-pulse shadow-lg shadow-rose-950/40 z-10 select-none mb-4">
-                  <ListMusic size={12} className="animate-spin" /> Ji Rishu Boss, Music Mode on hai
+            {/* 1. Brand Logo Header & Status Indicator */}
+            <div className="w-full flex flex-col items-center gap-3 select-none animate-fade text-center">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-pink-500 via-purple-600 to-cyan-500 flex items-center justify-center font-mono font-black text-white text-sm shadow-[0_0_20px_rgba(236,72,153,0.4)] border border-white/10">
+                  RG
                 </div>
-              )}
-              {store.activeVideo ? (
-                <YouTubePlayer />
-              ) : store.cameraActive ? (
-                <div className="w-full max-w-2xl mx-auto py-2">
-                  <CameraSystem />
+                <div className="text-left">
+                  <h1 className="text-xl font-mono tracking-[0.2em] font-black text-white uppercase flex items-center gap-2">
+                    {store.assistantName}
+                    <span className="text-[9px] font-mono font-bold text-pink-400 bg-pink-950/40 border border-pink-500/20 px-2 py-0.5 rounded-full shadow-[0_0_10px_rgba(236,72,153,0.2)] animate-pulse">
+                      VOICE FIRST
+                    </span>
+                  </h1>
+                  <p className="text-[10px] text-zinc-500 font-mono tracking-widest mt-0.5">
+                    SECURE COGNITIVE SYSTEM
+                  </p>
                 </div>
-              ) : (
-                <Orb onClick={toggleConnection} />
-              )}
+              </div>
+              
+              {/* Online / Offline Status Badge */}
+              <div className="mt-2">
+                <div className={`px-4 py-1.5 rounded-full border text-[10px] font-mono font-black tracking-widest flex items-center gap-2 backdrop-blur-md transition-all duration-300 ${
+                  store.liveState === 'offline'
+                    ? 'bg-zinc-950/50 border-rose-500/10 text-rose-400 shadow-[0_0_15px_rgba(239,68,68,0.05)]'
+                    : 'bg-zinc-950/50 border-emerald-500/15 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.08)]'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    store.liveState === 'offline' ? 'bg-rose-500 shadow-[0_0_8px_#ef4444]' : 'bg-emerald-400 shadow-[0_0_8px_#10b981] animate-pulse'
+                  }`} />
+                  <span>{store.liveState === 'offline' ? 'OFFLINE • DISCONNECTED' : 'ONLINE • COGNITIVE LINK READY'}</span>
+                </div>
+              </div>
             </div>
 
-            {/* Subtitle/Transcription Capture overlay panel */}
+            {/* 2. Interactive Central Voice Orb */}
+            <div className="flex-1 flex items-center justify-center w-full relative">
+              <Orb onClick={toggleConnection} />
+            </div>
+
+            {/* Live Captions Transcript Overlay Panel (Only when connected & transcribing) */}
             {store.liveState !== 'offline' && store.aiTranscript && (
-              <div className="w-full max-w-xl mx-auto bg-zinc-900/40 border border-zinc-800/50 backdrop-blur-md rounded-2xl p-4 space-y-2 select-all shadow-lg animate-fade">
-                <span className="text-[8px] font-mono tracking-widest text-zinc-500 uppercase flex items-center gap-1">
-                  <MessageSquare size={10} /> Live Captions Transcript
+              <div className="w-full max-w-lg bg-zinc-900/40 border border-zinc-800/40 backdrop-blur-md rounded-2xl p-4 space-y-1.5 select-text shadow-lg animate-fade text-center">
+                <span className="text-[9px] font-mono tracking-widest text-zinc-500 uppercase flex items-center justify-center gap-1.5">
+                  <span className="w-1.5 h-1.5 bg-fuchsia-400 rounded-full animate-ping" />
+                  Live Transcription
                 </span>
-                <p className="text-sm font-mono text-cyan-200 leading-relaxed italic text-center">
+                <p className="text-sm font-mono text-cyan-200 leading-relaxed italic">
                   "{store.aiTranscript}"
                 </p>
               </div>
             )}
 
-            {/* Visual audio stream scopes */}
-            <div className="w-full max-w-xl mx-auto">
-              <Waveform />
-            </div>
-
-            {/* Restored Continuous Conversation memory timeline */}
-            {store.conversations.length > 0 && (
-              <div className="w-full max-w-xl mx-auto bg-zinc-950 border border-zinc-900 rounded-2xl p-4 space-y-3 max-h-48 overflow-y-auto custom-scrollbar shadow-inner select-all">
-                <div className="flex justify-between items-center pb-2 border-b border-zinc-900">
-                  <span className="text-[9px] font-mono tracking-wider text-zinc-500 font-semibold uppercase flex items-center gap-1.5">
-                    <MessageSquare size={11} className="text-cyan-400" /> Stored Memory Decoders ({store.conversations.length})
-                  </span>
-                  <button
-                    onClick={() => store.clearConversationHistory()}
-                    className="text-[9px] font-mono text-rose-400 hover:text-rose-300 bg-rose-950/20 px-2 py-0.5 rounded border border-rose-900/40 transition-colors cursor-pointer"
-                  >
-                    CLEAR LOGS
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {store.conversations.map((msg) => (
-                    <div 
-                      key={msg.id} 
-                      className={`flex gap-2 text-xs font-mono leading-relaxed ${
-                        msg.role === 'user' ? 'justify-end' : 'justify-start'
-                      }`}
-                    >
-                      <div 
-                        className={`max-w-[85%] rounded-xl px-3 py-1.5 ${
-                          msg.role === 'user' 
-                            ? 'bg-zinc-900 text-cyan-300 border border-cyan-950/40' 
-                            : 'bg-zinc-900/40 text-zinc-300 border border-zinc-900'
-                        }`}
-                      >
-                        <span className="text-[8px] font-bold tracking-wider text-zinc-500 uppercase block mb-0.5">
-                          {msg.role === 'user' ? store.ownerName : store.assistantName}
-                        </span>
-                        <span>{msg.text}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            {/* Pulse Waveform feedback (Only when connected) */}
+            {store.liveState !== 'offline' && (
+              <div className="w-full max-w-md">
+                <Waveform />
               </div>
             )}
 
-            {/* Elegant Chat Fallback text bar */}
-            <div className="w-full max-w-xl mx-auto">
-              <form onSubmit={handleTextMessageSubmit} className="flex gap-2 bg-zinc-900/60 p-2 rounded-2xl border border-zinc-850 focus-within:ring-1 focus-within:ring-cyan-500/50 focus-within:border-cyan-500/50 transition-all shadow-inner">
-                <input
-                  type="text"
-                  placeholder={store.liveState === 'offline' ? "Connect session or type a message..." : "Type a message or command (e.g. \"play song name\")..."}
-                  value={textInputValue}
-                  onChange={(e) => setTextInputValue(e.target.value)}
-                  className="flex-1 bg-transparent px-3 py-1.5 font-mono text-xs text-white focus:outline-none placeholder-zinc-500"
-                  disabled={isSubmittingText}
-                />
+            {/* 3. Primary Controller Dock: Connect Voice Button & Settings Button */}
+            <div className="w-full flex flex-col items-center gap-5">
+              
+              <div className="flex items-center gap-3 w-full max-w-sm justify-center">
+                {/* CONNECT/DISCONNECT VOICE MAIN TRIGGER */}
                 <button
-                  type="submit"
-                  disabled={isSubmittingText || !textInputValue.trim()}
-                  className="shrink-0 bg-gradient-to-tr from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white rounded-xl px-4 py-1.5 text-[10px] font-mono uppercase tracking-widest font-black transition-all flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <Send size={10} /> {isSubmittingText ? 'TRANSCEIVING' : 'SEND'}
-                </button>
-              </form>
-            </div>
-
-            {/* Direct voice connection toggle console */}
-            <div className="flex gap-4 items-center justify-center select-none pt-4">
-              <button
-                onClick={toggleConnection}
-                className={`px-6 py-3 rounded-2xl font-mono text-xs font-bold tracking-widest uppercase transition-all duration-300 flex items-center gap-2 shadow-lg cursor-pointer ${
-                  store.liveState === 'offline'
-                    ? 'bg-gradient-to-tr from-cyan-600 to-blue-700 hover:from-cyan-500 hover:to-blue-600 text-white shadow-cyan-500/20 ring-1 ring-cyan-400/40'
-                    : 'bg-zinc-900 hover:bg-zinc-800 text-rose-500 border border-zinc-800'
-                }`}
-              >
-                {store.liveState === 'offline' ? (
-                  <>
-                    <Power size={14} className="animate-spin" />
-                    Connect Voice
-                  </>
-                ) : (
-                  <>
-                    <PowerOff size={14} />
-                    Disconnect Session
-                  </>
-                )}
-              </button>
-
-              {store.liveState !== 'offline' && (
-                <button
-                  onClick={handleMuteToggle}
-                  className={`p-3.5 rounded-2xl transition-all border shadow-lg cursor-pointer ${
-                    store.isMuted
-                      ? 'bg-rose-950/40 text-rose-400 border-rose-900/50 animate-pulse'
-                      : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border-zinc-800'
+                  onClick={toggleConnection}
+                  className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-2xl font-mono text-xs font-black tracking-widest uppercase transition-all duration-300 shadow-xl cursor-pointer ${
+                    store.liveState === 'offline'
+                      ? 'bg-gradient-to-tr from-pink-600 via-purple-600 to-cyan-600 hover:scale-[1.02] active:scale-[0.98] text-white shadow-pink-500/10 ring-1 ring-white/10 hover:ring-pink-400/55'
+                      : 'bg-zinc-900 hover:bg-zinc-850 text-rose-500 border border-zinc-800'
                   }`}
-                  title={store.isMuted ? 'Unmute microphone feed' : 'Mute microphone feed'}
                 >
-                  {store.isMuted ? <MicOff size={16} /> : <Mic size={16} />}
+                  {store.liveState === 'offline' ? (
+                    <>
+                      <Power size={14} className="animate-pulse" />
+                      <span>Connect Voice</span>
+                    </>
+                  ) : (
+                    <>
+                      <PowerOff size={14} />
+                      <span>Disconnect Session</span>
+                    </>
+                  )}
                 </button>
+
+                {/* MIC MUTE OPTION (ONLY IF CONNECTED) */}
+                {store.liveState !== 'offline' && (
+                  <button
+                    onClick={handleMuteToggle}
+                    className={`p-4 rounded-2xl transition-all border shadow-lg cursor-pointer ${
+                      store.isMuted
+                        ? 'bg-rose-950/40 text-rose-400 border-rose-900/50 animate-pulse'
+                        : 'bg-zinc-900 hover:bg-zinc-850 text-zinc-400 border-zinc-850'
+                    }`}
+                    title={store.isMuted ? 'Unmute microphone feed' : 'Mute microphone feed'}
+                  >
+                    {store.isMuted ? <MicOff size={16} /> : <Mic size={16} />}
+                  </button>
+                )}
+
+                {/* SETTINGS GEAR CONFIG BUTTON */}
+                <button
+                  onClick={() => setActiveTab('settings')}
+                  className="p-4 rounded-2xl bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-white border border-zinc-850 hover:border-zinc-700 transition-all cursor-pointer shadow-lg hover:scale-[1.02] active:scale-[0.98]"
+                  title="Open Settings Configuration Panel"
+                >
+                  <SettingsIcon size={16} />
+                </button>
+              </div>
+
+              {/* Seamless keyboard fallback command launcher toggle */}
+              <div className="w-full flex justify-center">
+                <button 
+                  onClick={() => setChatVisible(!chatVisible)}
+                  className="text-[10px] font-mono text-zinc-600 hover:text-cyan-400 flex items-center gap-1.5 uppercase tracking-widest transition-colors duration-200 cursor-pointer"
+                >
+                  <MessageSquare size={11} />
+                  <span>{chatVisible ? 'Hide Text Command Box' : 'Keyboard Command Backup'}</span>
+                </button>
+              </div>
+
+              {/* Keyboard fallback panel element (Toggles dynamically on press) */}
+              {chatVisible && (
+                <div className="w-full max-w-md animate-slide-up">
+                  <form onSubmit={handleTextMessageSubmit} className="flex gap-2 bg-zinc-900/40 p-2 rounded-2xl border border-zinc-850 focus-within:ring-1 focus-within:ring-pink-500/50 focus-within:border-pink-500/50 transition-all shadow-inner">
+                    <input
+                      type="text"
+                      placeholder={store.liveState === 'offline' ? "Connect voice session or type command..." : "Type text command (e.g. \"play song name\")..."}
+                      value={textInputValue}
+                      onChange={(e) => setTextInputValue(e.target.value)}
+                      className="flex-1 bg-transparent px-3 py-1.5 font-mono text-xs text-white focus:outline-none placeholder-zinc-500"
+                      disabled={isSubmittingText}
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSubmittingText || !textInputValue.trim()}
+                      className="shrink-0 bg-gradient-to-tr from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white rounded-xl px-4 py-1.5 text-[10px] font-mono uppercase tracking-widest font-black transition-all flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Send size={10} /> {isSubmittingText ? 'SENDING' : 'SEND'}
+                    </button>
+                  </form>
+                </div>
               )}
-            </div>
-
-            {/* Creator / Owner bottom quick banner */}
-            <div className="text-center font-mono text-[10px] text-zinc-600 border-t border-zinc-900 pt-6 mt-4 select-none flex items-center justify-center gap-1">
-              <ShieldCheck size={11} className="text-cyan-500/80" /> Created for Owner <strong className="text-zinc-500">{store.ownerName}</strong> by Creator <strong className="text-zinc-500">{store.creatorName}</strong>
-            </div>
-          </div>
-        </div>
-
-        {/* TAB 2: Dashboard Panels */}
-        <div className={activeTab === 'dashboard' ? 'block' : 'hidden'}>
-          <div className="px-4 py-8">
-            <Dashboard />
-          </div>
-        </div>
-
-        {/* TAB 3: Settings Page */}
-        <div className={activeTab === 'settings' ? 'block' : 'hidden'}>
-          <div className="px-4 py-8">
-            <SettingsPanel />
-          </div>
-        </div>
-
-        {/* TAB 4: Telegram Live Control */}
-        <div className={activeTab === 'telegram' ? 'block select-text' : 'hidden'}>
-          <div className="px-4 py-8">
-            <TelegramPublisher />
-          </div>
-        </div>
-
-        {/* TAB 5: YouTube Media Hub */}
-        <div className={activeTab === 'youtube' ? 'block' : 'hidden'}>
-          <div className="px-4 py-8">
-            <YouTubeMediaHub />
-          </div>
-        </div>
-
-        {/* TAB 6: Smart Camera System Hub */}
-        <div className={activeTab === 'camera' ? 'block' : 'hidden'}>
-          <div className="px-4 py-8">
-            <CameraSystem />
-          </div>
-        </div>
-
-        {/* Floating Mini-Player Control Pill when listening in other tabs */}
-        {activeTab !== 'orb' && store.activeVideo && (
-          <div className="fixed bottom-6 right-6 bg-zinc-900/95 border border-zinc-800 rounded-2xl p-3.5 shadow-2xl z-40 max-w-xs animate-slide-up flex items-center gap-3 select-none backdrop-blur-md">
-            <div className="relative shrink-0 w-11 h-11 rounded-lg overflow-hidden border border-zinc-850">
-              <img 
-                src={store.activeVideo.thumbnail} 
-                alt="Track art"
-                className="w-full h-full object-cover" 
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
-                <Disc className="text-cyan-400 animate-spin-slow" size={12} />
+              
+              {/* Creator & Owner Minimal Slate Indicator */}
+              <div className="text-[9px] font-mono text-zinc-700 tracking-wider">
+                CREATED FOR OWNER <strong className="text-zinc-600">{store.ownerName}</strong> BY CREATOR <strong className="text-zinc-600">{store.creatorName}</strong>
               </div>
             </div>
+          </div>
+        ) : (
+          /* ACTIVE ON-DEMAND TRANSIENT FEATURE OR SUB-VIEW ( revealed dynamically by voice/actions ) */
+          <div className="flex-1 flex flex-col justify-start">
             
-            <div className="min-w-0 flex-1 space-y-0.5">
-              <span className="text-[8px] font-mono font-black text-rose-450 uppercase tracking-widest flex items-center gap-1">
-                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
-                Now Playing Video
-              </span>
-              <h4 className="text-xs font-mono font-black text-white truncate uppercase leading-none">
-                {store.activeVideo.title}
-              </h4>
-              <button
-                onClick={() => setActiveTab('orb')}
-                className="text-[10px] font-mono text-zinc-400 hover:text-cyan-400 flex items-center gap-0.5 underline transition-colors cursor-pointer"
-              >
-                OPEN WORKspace CONTROLLER
-              </button>
+            {/* Clean, glassy minimal top ribbon for active context, offering exit handle */}
+            <div className="border-b border-zinc-900 bg-zinc-950/80 backdrop-blur-md sticky top-0 z-30 select-none">
+              <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-pink-500 animate-pulse shadow-[0_0_8px_rgba(236,72,153,0.8)]" />
+                  <h2 className="text-[11px] font-mono font-black uppercase tracking-widest text-zinc-400">
+                    Active System Module: <strong className="text-white font-black">{getModuleLabel()}</strong>
+                  </h2>
+                </div>
+                
+                {/* Standardized "Exit to Voice Interface" Back Button */}
+                <button 
+                  onClick={handleCloseActiveModule}
+                  className="flex items-center gap-1 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-white px-3 py-1.5 rounded-xl border border-zinc-800 hover:border-zinc-750 text-[10px] font-mono font-bold uppercase transition-all duration-200 cursor-pointer shadow-md"
+                >
+                  <X size={12} className="text-pink-400" />
+                  <span>Exit Module</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Dedicated Transient Feature Panels Content Area */}
+            <div className="flex-1 w-full max-w-7xl mx-auto px-4 py-6">
+              {activeTab === 'settings' && <SettingsPanel />}
+              {activeTab === 'vault' && <VaultTab />}
+              {activeTab === 'story' && <StoryMode />}
+              {activeTab === 'telegram' && <TelegramPublisher />}
+              {activeTab === 'dashboard' && <Dashboard />}
+
+              {/* Dynamic Overlay Panels within Orb Mode */}
+              {activeTab === 'orb' && (
+                <div className="w-full flex-1 flex flex-col items-center justify-center py-4">
+                  {store.activeVideo ? (
+                    <div className="w-full max-w-3xl bg-zinc-900/30 border border-zinc-850 rounded-[24px] p-4 shadow-2xl relative">
+                      <YouTubePlayer />
+                    </div>
+                  ) : store.cameraActive ? (
+                    <div className="w-full max-w-2xl bg-zinc-900/30 border border-zinc-850 rounded-[24px] p-4 shadow-2xl">
+                      <CameraSystem />
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
           </div>
         )}

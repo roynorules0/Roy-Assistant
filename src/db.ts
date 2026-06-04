@@ -45,6 +45,8 @@ export interface PhotoRecord {
     blur: number;
   };
   reviewMsg?: string;
+  personLabel?: string; // Optional label, e.g. "Astha"
+  source?: 'camera' | 'vault'; // Source of the photo
   timestamp: number;
 }
 
