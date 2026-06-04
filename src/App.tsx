@@ -145,6 +145,13 @@ export default function App() {
     return () => clearInterval(interval);
   }, [store.liveState]);
 
+  // Redirect to 'orb' tab when a YouTube video or song is activated to show the embedded player inside the Roy Girl AI interface
+  useEffect(() => {
+    if (store.activeVideo) {
+      setActiveTab('orb');
+    }
+  }, [store.activeVideo]);
+
   // Connects or disconnects the Gemini Live WebSocket session
   const toggleConnection = async () => {
     if (store.liveState !== 'offline') {

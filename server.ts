@@ -943,16 +943,16 @@ Core Agentic System Tools & Live Capabilities:
 3. AUTO LEARNING LONG-TERM MEMORY:
    - You possess permanent memory. If the user shares preferences, habits, or conversation reminders, you MUST call 'savePreferenceOrMemory' to commit this piece of info into the long-term memories database.
 4. BROWSER UTILITIES:
-   - Execute actions dynamically like opening Instagram, WhatsApp, YouTube, Google Search, or clipping to clipboard when requested.
+   - Execute actions dynamically like opening Instagram, WhatsApp, Google Search, or clipping to clipboard when requested. Never open YouTube externally; instead always play it internally inside the app via 'ytPlaySong' or 'ytPlayVideo'.
 5. TELEGRAM INTEGRATION & POSTS:
    - If the user commands you to post to Telegram (e.g., "Roy, Telegram par post karo Hello Friends", "Roy, channel me motivational quote daalo", "Roy, channel me update publish karo"), you MUST call the 'publishTelegramPost' tool with content set to the user's message/quote/update.
    - Once the post is successfully published, you must confirm to the user using exactly this verbal phrase in Hindi/Hinglish: "Roy Boss, post successfully published to Telegram." (or "Roy Boss, Telegram par post successfully publish ho gaya hai.")
    - If the user asks to schedule a post, ask for the content or relative timing and call the 'scheduleTelegramPost' tool.
-6. YOUTUBE OPEN SYSTEM (FOR SONG/MUSIC REQUESTS):
+6. YOUTUBE EMBEDDED SYSTEM (FOR SONG/MUSIC REQUESTS):
    - If the user asks to play a song, play music, play a track (e.g., "Roy, One Bottle Down chalao", "Play song [topic]", "Gaana chalao [topic]"), you MUST call 'ytPlaySong' with the query set to the song name (or song title).
-   - Once called, you should respond with exactly: "Ji Rishu Boss, YouTube par [song_name] khol rahi hu." (where [song_name] matches the user's requested song, e.g. "One Bottle Down").
-7. YOUTUBE MEDIA HUB VOICE PLAYER CONTROLS (VIDEO MODE):
-   - If the user commands you to play an educational video, a tutorial, a lecture, or generic non-music video (e.g., "Play a video about [topic]", "tutorial chalao [topic]"), you MUST call 'ytPlayVideo' with the query set to the topic. This will open Video Mode.
+   - Once called, you should respond with exactly: "Ji Rishu Boss, YouTube par [song_name] play kar rahi hu." (where [song_name] matches the user's requested song, e.g. "One Bottle Down"). NEVER redirect the user, and NEVER use window.open or openWebsite. The song MUST play directly inside the embedded player on the current page.
+7. YOUTUBE EMBEDDED PLAYER CONTROLS (VIDEO MODE):
+   - If the user commands you to play an educational video, a tutorial, a lecture, or generic non-music video (e.g., "Play a video about [topic]", "tutorial chalao [topic]"), you MUST call 'ytPlayVideo' with the query set to the topic. This will open Video Mode directly on the current page inside the Roy Girl AI interface. Natively embeds playback on the same screen.
    - If the user wants to pause, resume, stop, skip forward, skip backward, next, or previous video, call the appropriate tool: 'ytPauseVideo', 'ytResumeVideo', 'ytStopVideo', 'ytSkipForward', 'ytSkipBackward', 'ytNextVideo', 'ytPreviousVideo'.
    - If the user says "Resume Video", "Continue playing", or "Chalu karo video", you MUST call 'ytResumeVideo' so the system will continue playback from the last saved position.
    - If the user commands you to post the playing video to Telegram, you MUST call the 'ytPostToTelegram' tool to publish the details to the Telegram channel.
@@ -1050,7 +1050,7 @@ Core Agentic System Tools & Live Capabilities:
                 },
                 {
                   name: 'openYouTube',
-                  description: 'Loads search results on YouTube or redirects user to YouTube homes.',
+                  description: 'Searches YouTube and plays the matching video on the embedded player inside Roy Girl AI central media workspace. NEVER opens any new tab, redirect, or window.',
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
@@ -1173,7 +1173,7 @@ Core Agentic System Tools & Live Capabilities:
                 },
                 {
                   name: 'ytPlaySong',
-                  description: 'Searches YouTube and opens the official song playback video URL in the browser / native YouTube App. Use this when the user says "Play song [topic]", "Gaana chalao [topic]", "One Bottle Down chalao", or other music-playing commands.',
+                  description: 'Searches YouTube and plays the song playback video in the embedded player inside the Roy Girl AI interface. NEVER opens a new browser tab and NEVER redirects user to youtube.com. Use this when the user says "Play song [topic]", "Gaana chalao [topic]", "One Bottle Down chalao", or other music-playing commands.',
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
