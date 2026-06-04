@@ -70,6 +70,19 @@ export interface AppState {
   mediaVolume: number;
   mediaMuted: boolean;
 
+  // Camera System
+  cameraActive: boolean;
+  cameraFacingMode: 'user' | 'environment';
+  capturedPhotos: db.PhotoRecord[];
+  reviewPhoto: db.PhotoRecord | null;
+
+  setCameraActive: (active: boolean) => void;
+  setCameraFacingMode: (mode: 'user' | 'environment') => void;
+  setReviewPhoto: (photo: db.PhotoRecord | null) => void;
+  addCapturedPhoto: (photo: db.PhotoRecord) => Promise<void>;
+  deleteCapturedPhoto: (id: string) => Promise<void>;
+  clearCapturedPhotos: () => Promise<void>;
+
   // State actions
   setApiKey: (key: string) => void;
   setLiveState: (state: LiveState) => void;
@@ -206,6 +219,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   mediaVolume: localStorage.getItem('__roy_mediaVolume') !== null ? Number(localStorage.getItem('__roy_mediaVolume')) : 80,
   mediaMuted: localStorage.getItem('__roy_mediaMuted') === 'true',
 
+  // Camera System Initial Values
+  cameraActive: false,
+  cameraFacingMode: 'user',
+  capturedPhotos: [],
+  reviewPhoto: null,
+
   setApiKey: (key) => {
     localStorage.setItem('__roy_apiKey', key);
     set({ apiKey: key });
@@ -330,6 +349,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const memories = await db.getMemories();
       const secretNotes = await db.getSecretNotes();
       const conversations = await db.getConversations();
+      const photos = await db.getPhotos();
       
       const storedRems = localStorage.getItem('__roy_reminders');
       let reminders = [];
@@ -344,7 +364,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         localStorage.setItem('__roy_reminders', JSON.stringify(reminders));
       }
 
-      set({ goals, memories, secretNotes, reminders, conversations });
+      set({ goals, memories, secretNotes, reminders, conversations, capturedPhotos: photos });
 
       // Diagnostic and permission listeners
       get().updateDiagnostics();
@@ -558,6 +578,42 @@ export const useAppStore = create<AppState>((set, get) => ({
       console.error('Failed to parse and import memory backups:', e);
       return false;
     }
+  },
+
+  setCameraActive: (active) => {
+    set({ cameraActive: active });
+  },
+
+  setCameraFacingMode: (mode) => {
+    set({ cameraFacingMode: mode });
+  },
+
+  setReviewPhoto: (photo) => {
+    set({ reviewPhoto: photo });
+  },
+
+  addCapturedPhoto: async (photo) => {
+    await db.savePhoto(photo);
+    const updatedPhotos = await db.getPhotos();
+    set({ capturedPhotos: updatedPhotos });
+    get().addMemory(`Captured a new camera photo record (${photo.id}) on ${photo.date} at ${photo.time}`, 'auto');
+  },
+
+  deleteCapturedPhoto: async (id) => {
+    await db.deletePhoto(id);
+    const updatedPhotos = await db.getPhotos();
+    set({ capturedPhotos: updatedPhotos });
+    if (get().reviewPhoto?.id === id) {
+      set({ reviewPhoto: null });
+    }
+  },
+
+  clearCapturedPhotos: async () => {
+    const list = get().capturedPhotos;
+    for (const ph of list) {
+      await db.deletePhoto(ph.id);
+    }
+    set({ capturedPhotos: [], reviewPhoto: null });
   },
 
   addConversationMessage: async (role, text) => {

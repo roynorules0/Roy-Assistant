@@ -8,13 +8,14 @@ import Dashboard from './components/Dashboard';
 import TelegramPublisher from './components/TelegramPublisher';
 import YouTubePlayer from './components/YouTubePlayer';
 import YouTubeMediaHub from './components/YouTubeMediaHub';
+import CameraSystem from './components/CameraSystem';
 import { 
-  Mic, MicOff, Power, PowerOff, Settings as SettingsIcon, LayoutDashboard, Sparkles, User, Info, MessageSquare, ShieldCheck, Share2, Send, Youtube, Disc, ListMusic
+  Mic, MicOff, Power, PowerOff, Settings as SettingsIcon, LayoutDashboard, Sparkles, User, Info, MessageSquare, ShieldCheck, Share2, Send, Youtube, Disc, ListMusic, Camera
 } from 'lucide-react';
 
 export default function App() {
   const store = useAppStore();
-  const [activeTab, setActiveTab] = useState<'orb' | 'dashboard' | 'settings' | 'telegram' | 'youtube'>('orb');
+  const [activeTab, setActiveTab] = useState<'orb' | 'dashboard' | 'settings' | 'telegram' | 'youtube' | 'camera'>('orb');
   const wsRef = useRef<WebSocket | null>(null);
   const currentAiUtterance = useRef('');
   const currentUserUtterance = useRef('');
@@ -573,6 +574,45 @@ export default function App() {
                     window.dispatchEvent(new CustomEvent('yt-player-command', { detail: { action: 'set-volume', value: targetVolume } }));
                     resultMessage = `Ji Rishu Boss, volume ${targetVolume} percent kar diya.`;
                   }
+                } else if (name === 'cameraOpen') {
+                  const facing = args.facingMode || 'user';
+                  store.setCameraActive(true);
+                  if (facing === 'environment' || facing === 'back') {
+                    store.setCameraFacingMode('environment');
+                  } else {
+                    store.setCameraFacingMode('user');
+                  }
+                  setActiveTab('orb');
+                  window.dispatchEvent(new CustomEvent('camera-command', { detail: { action: 'open', value: facing } }));
+                  resultMessage = `Ji Rishu Boss, camera khol rahi hu in ${facing === 'environment' ? 'back/rear' : 'front/selfie'} mode.`;
+                } else if (name === 'cameraClose') {
+                  store.setCameraActive(false);
+                  window.dispatchEvent(new CustomEvent('camera-command', { detail: { action: 'close' } }));
+                  resultMessage = "Ji Rishu Boss, camera close kar diya.";
+                } else if (name === 'cameraCapture') {
+                  const isSelfie = args.isSelfie === true;
+                  const burstCount = args.burstCount || 1;
+                  setActiveTab('orb');
+                  window.dispatchEvent(new CustomEvent('camera-command', { detail: { action: 'capture', isSelfie, burstCount } }));
+                  resultMessage = burstCount > 1 
+                    ? `Ji Rishu Boss, ${burstCount} photos burst style click kar rahi hu.`
+                    : `Ji Rishu Boss, snap click kar rahi hu.`;
+                } else if (name === 'cameraAction') {
+                  const action = args.action;
+                  window.dispatchEvent(new CustomEvent('camera-command', { detail: { action } }));
+                  if (action === 'save') {
+                    resultMessage = "Ji Rishu Boss, photo gallery me save kar di.";
+                  } else if (action === 'retake') {
+                    resultMessage = "Ji Rishu Boss, ready ho jaiye, dobara capture kar rahi hu.";
+                  } else if (action === 'delete') {
+                    resultMessage = "Ji Rishu Boss, photo delete kar di.";
+                  } else if (action === 'gallery_open') {
+                    resultMessage = "Ji Rishu Boss, gallery khol rahi hu.";
+                  } else if (action === 'gallery_close') {
+                    resultMessage = "Ji Rishu Boss, gallery close kar di.";
+                  } else {
+                    resultMessage = `Action ${action} processed.`;
+                  }
                 }
               } catch (e: any) {
                 resultMessage = `Error executing browser layout action: ${e.message}`;
@@ -718,6 +758,18 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => setActiveTab('camera')}
+              className={`p-2.5 rounded-xl transition-all cursor-pointer ${
+                activeTab === 'camera' 
+                  ? 'bg-zinc-900 text-rose-450 border border-zinc-800' 
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40'
+              }`}
+              title="Smart Camera Hub"
+            >
+              <Camera size={18} className="text-rose-400 animate-pulse" />
+            </button>
+
+            <button
               onClick={() => setActiveTab('settings')}
               className={`p-2.5 rounded-xl transition-all cursor-pointer ${
                 activeTab === 'settings' 
@@ -747,6 +799,10 @@ export default function App() {
               )}
               {store.activeVideo ? (
                 <YouTubePlayer />
+              ) : store.cameraActive ? (
+                <div className="w-full max-w-2xl mx-auto py-2">
+                  <CameraSystem />
+                </div>
               ) : (
                 <Orb onClick={toggleConnection} />
               )}
@@ -900,6 +956,13 @@ export default function App() {
         <div className={activeTab === 'youtube' ? 'block' : 'hidden'}>
           <div className="px-4 py-8">
             <YouTubeMediaHub />
+          </div>
+        </div>
+
+        {/* TAB 6: Smart Camera System Hub */}
+        <div className={activeTab === 'camera' ? 'block' : 'hidden'}>
+          <div className="px-4 py-8">
+            <CameraSystem />
           </div>
         </div>
 

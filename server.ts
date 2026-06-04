@@ -962,11 +962,23 @@ Core Agentic System Tools & Live Capabilities:
    - Song Repeat / Loop commands:
      - "Repeat song", "Loop song", "Loop chalu karo", "Song repeat par lagao": call 'ytSetRepeat' with enabled=true. Once called, tell the user in Hinglish: "Ji Rishu Boss, song loop mode chalu kar diya hai."
      - "Repeat off", "Loop band karo", "Loop off": call 'ytSetRepeat' with enabled=false. Once called, tell the user in Hinglish: "Ji Rishu Boss, song loop mode band kar diya hai."
-8. YOUTUBE EMBEDDED PLAYER CONTROLS (VIDEO MODE):
+ 8. YOUTUBE EMBEDDED PLAYER CONTROLS (VIDEO MODE):
    - If the user commands you to play an educational video, a tutorial, a lecture, or generic non-music video (e.g., "Play a video about [topic]", "tutorial chalao [topic]"), you MUST call 'ytPlayVideo' with the query set to the topic. This will open Video Mode directly on the current page inside the Roy Girl AI interface. Natively embeds playback on the same screen.
    - If the user wants to pause, resume, stop, skip forward, skip backward, next, or previous video, call the appropriate tool: 'ytPauseVideo', 'ytResumeVideo', 'ytStopVideo', 'ytSkipForward', 'ytSkipBackward', 'ytNextVideo', 'ytPreviousVideo'.
    - If the user says "Resume Video", "Continue playing", or "Chalu karo video", you MUST call 'ytResumeVideo' so the system will continue playback from the last saved position.
    - If the user commands you to post the playing video to Telegram, you MUST call the 'ytPostToTelegram' tool to publish the details to the Telegram channel.
+9. SMART CAMERA ASSISTANT SYSTEM RULES:
+   - When the user says "Camera on karo" / "Camera kholo", you MUST call 'cameraOpen' (facingMode: 'user'). Reply with exactly: "Ji Rishu Boss, camera khol rahi hu."
+   - When the user says "Front camera kholo" or "Selfie mode on karo", you MUST call 'cameraOpen' with facingMode='user'. Reply with exactly: "Ji Rishu Boss, front camera khol rahi hu."
+   - When the user says "Back camera kholo" or "Back camera switch karo", you MUST call 'cameraOpen' with facingMode='environment'. Reply with exactly: "Ji Rishu Boss, back camera khol rahi hu."
+   - When the user says "Photo click karo" / "Photo snap karo", you MUST call 'cameraCapture' with isSelfie=false, burstCount=1. Reply with exactly: "Ji Rishu Boss, photo capture ho gayi."
+   - When the user says "Selfie le lo" / "Selfie click karo", you MUST call 'cameraCapture' with isSelfie=true, burstCount=1. Reply with exactly: "Ji Rishu Boss, selfie countdown chalu ho raha hai."
+   - When the user says "5 photos click karo" / "Burst capture karo", you MUST call 'cameraCapture' with burstCount=5. Reply with exactly: "Ji Rishu Boss, 5 pictures burst capture kar rahi hu."
+   - After a photo is clicked, they can say "Save photo" / "Gallery me save karo" / "Ye photo achhi hai save kar do", you MUST call 'cameraAction' with action="save". Reply with exactly: "Ji Rishu Boss, photo gallery me save kar di."
+   - If user says "Retake photo" / "Dobara le lo" / "Retake karo", you MUST call 'cameraAction' with action="retake". Reply with exactly: "Ji Rishu Boss, ready ho jaiye, dobara capture kar rahi hu."
+   - If user says "Delete photo" / "Delete kar do photo", you MUST call 'cameraAction' with action="delete". Reply with exactly: "Ji Rishu Boss, photo delete kar di."
+   - If user says "Next photo dikhao", you MUST call 'cameraAction' with action="next_photo". Reply with exactly: "Ji Rishu Boss, pichli aur ahli photos dikha rahi hu."
+   - If user says "Gallery kholo" / "Photos history dikhao", you MUST call 'cameraAction' with action="gallery_open". Reply with exactly: "Ji Rishu Boss, photo gallery khol rahi hu."
 `;
 
     try {
@@ -1300,6 +1312,46 @@ Core Agentic System Tools & Live Capabilities:
                       relativeChange: { type: Type.NUMBER, description: 'Positive or negative value to adjust relative to current volume (e.g. 15 or -15)' },
                       mute: { type: Type.BOOLEAN, description: 'True to mute, false to unmute' }
                     }
+                  }
+                },
+                {
+                  name: 'cameraOpen',
+                  description: 'Opens/Turns on the camera. Use when the user says "Camera on karo", "Front camera kholo", "Back camera kholo", "Selfie le lo".',
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      facingMode: { type: Type.STRING, description: 'The camera direction: "user" for front/selfie camera, "environment" for back camera' }
+                    }
+                  }
+                },
+                {
+                  name: 'cameraClose',
+                  description: 'Closes or turns off the camera preview.',
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {}
+                  }
+                },
+                {
+                  name: 'cameraCapture',
+                  description: 'Captures/snaps a photo or starts a countdown/burst process. Use when the user says "Photo click karo", "Selfie le lo", "5 photos click karo".',
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      isSelfie: { type: Type.BOOLEAN, description: 'Whether to trigger front camera/selfie mode countdown' },
+                      burstCount: { type: Type.NUMBER, description: 'Number of photos to capture in burst mode (e.g. 5)' }
+                    }
+                  }
+                },
+                {
+                  name: 'cameraAction',
+                  description: 'Performs a gallery, retake, delete, or save action on camera photo. Use when user says "Save photo", "Retake photo", "Delete photo", "Gallery kholo", "Next photo", "Pichla photo".',
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      action: { type: Type.STRING, description: 'Value can be: "save", "retake", "delete", "gallery_open", "gallery_close", "next_photo", "prev_photo"' }
+                    },
+                    required: ['action']
                   }
                 },
               ],

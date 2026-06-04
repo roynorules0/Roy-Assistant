@@ -2,7 +2,8 @@
   "name": "Remix: Remix: Roy Girl AI Voice Assistant",
   "description": "An advanced, expressive, and confident voice-only AI assistant with goal tracking, long-term IndexedDB memory, and real-time audio interaction powered by Gemini.",
   "requestFramePermissions": [
-    "microphone"
+    "microphone",
+    "camera"
   ],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

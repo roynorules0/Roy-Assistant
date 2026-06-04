@@ -31,8 +31,25 @@ export interface ConversationMessage {
   timestamp: number;
 }
 
+export interface PhotoRecord {
+  id: string;
+  dataUrl: string;
+  date: string;
+  time: string;
+  location?: string;
+  isBest?: boolean;
+  score?: {
+    sharpness: number;
+    lighting: number;
+    faceVisibility: number;
+    blur: number;
+  };
+  reviewMsg?: string;
+  timestamp: number;
+}
+
 const DB_NAME = 'RoyGirlAI_DB';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export function initDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -54,6 +71,9 @@ export function initDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('conversations')) {
         db.createObjectStore('conversations', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('photos')) {
+        db.createObjectStore('photos', { keyPath: 'id' });
       }
     };
   });
@@ -202,6 +222,43 @@ export async function clearConversations(): Promise<void> {
     const transaction = db.transaction('conversations', 'readwrite');
     const store = transaction.objectStore('conversations');
     const request = store.clear();
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getPhotos(): Promise<PhotoRecord[]> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction('photos', 'readonly');
+    const store = transaction.objectStore('photos');
+    const request = store.getAll();
+    request.onsuccess = () => {
+      const list = request.result || [];
+      list.sort((a, b) => b.timestamp - a.timestamp); // newest first
+      resolve(list);
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function savePhoto(photo: PhotoRecord): Promise<void> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction('photos', 'readwrite');
+    const store = transaction.objectStore('photos');
+    const request = store.put(photo);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function deletePhoto(id: string): Promise<void> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction('photos', 'readwrite');
+    const store = transaction.objectStore('photos');
+    const request = store.delete(id);
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
   });
