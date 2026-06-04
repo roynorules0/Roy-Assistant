@@ -7,6 +7,24 @@
   
   --animate-fade: fadeIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   --animate-shake: shake 0.35s ease-in-out;
+  --animate-laser-scroll: laserScroll 2.2s ease-in-out infinite;
+  --animate-slide-left: slideLeft 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-fade-in: fadeInSimple 0.25s ease-out forwards;
+}
+
+@keyframes laserScroll {
+  0%, 100% { transform: translateY(0); opacity: 0.2; }
+  50% { transform: translateY(180px); opacity: 1; }
+}
+
+@keyframes slideLeft {
+  from { transform: translate3d(100%, 0, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+
+@keyframes fadeInSimple {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes fadeIn {

@@ -1011,6 +1011,12 @@ Core Agentic System Tools & Live Capabilities:
       - You MUST call 'vaultAction' with action="show_gallery", filter="all".
       - Reply in Hindi/Hinglish: "Ji Rishu Boss, aapki personal photo gallery screen par khol rahi hu."
 
+ 12. SCREEN AWARENESS SYSTEM RULES:
+    - When the user asks you to look at their screen, inspect can have active page elements (e.g., "Roy screen dekho", "Roy screen analyze karo", "Analyze my page", "current screen dekho"):
+      - You MUST call 'analyzeActiveScreen'.
+      - Tell the user in Hinglish/Hindi: "Ji Rishu Boss, main aapki screen scan kar rahi hu."
+      - Once the tool returns the results (listing active view name, detected buttons, input fields, warnings / alerts), synthesize the results and speak them in Hindi/Hinglish to Rishu Boss. Tell them about buttons on the screen, active form fields, and whether any system warning elements exist, and guide them on what to click or do.
+
   - STRICT RULES FOR RESPONSES:
     - Never say: "Enhancement complete" unless the enhanced image is actually generated and visible on screen (wait for event response).
     - Always address the user as "Rishu Boss".
@@ -1429,6 +1435,16 @@ Core Agentic System Tools & Live Capabilities:
                       }
                     },
                     required: ['action']
+                  }
+                },
+                {
+                  name: 'analyzeActiveScreen',
+                  description: 'Triggers real-time screen awareness capture and inspects the active browser layout. Use when the user says "Roy screen dekho", "Roy current page dekho", "Roy screen analyze karo" or asks to read/inspect what is on their screen.',
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      query: { type: Type.STRING, description: 'Optional user instruction or query about what specific item to inspect on screen (e.g. "search button", "errors")' }
+                    }
                   }
                 },
               ],

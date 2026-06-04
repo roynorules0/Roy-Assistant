@@ -167,6 +167,26 @@ export interface AppState {
   };
   setStoryState: (state: Partial<AppState['storyState']>) => void;
   resetStoryState: () => void;
+
+  // Astha Companion System State
+  asthaBirthday: string;
+  asthaAnniversary: string;
+  asthaReasons: { id: string; text: string; timestamp: number }[];
+  asthaSongs: { id: string; title: string; artist?: string; isSpecial?: boolean; url?: string; timestamp: number }[];
+  asthaPlans: { id: string; category: 'gift' | 'date' | 'celebration'; text: string; completed: boolean; timestamp: number }[];
+  asthaLetters: { id: string; title: string; text: string; type: 'shayari' | 'letter' | 'compliment'; timestamp: number }[];
+
+  setAsthaBirthday: (date: string) => void;
+  setAsthaAnniversary: (date: string) => void;
+  addAsthaReason: (text: string) => void;
+  deleteAsthaReason: (id: string) => void;
+  addAsthaSong: (title: string, artist?: string, isSpecial?: boolean, url?: string) => void;
+  deleteAsthaSong: (id: string) => void;
+  addAsthaPlan: (category: 'gift' | 'date' | 'celebration', text: string) => void;
+  toggleAsthaPlan: (id: string) => void;
+  deleteAsthaPlan: (id: string) => void;
+  addAsthaLetter: (title: string, text: string, type: 'shayari' | 'letter' | 'compliment') => void;
+  deleteAsthaLetter: (id: string) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -296,6 +316,104 @@ export const useAppStore = create<AppState>((set, get) => ({
   setUserTranscript: (userTranscript) => set({ userTranscript }),
   setAiTranscript: (aiTranscript) => set({ aiTranscript }),
   setConnectionError: (connectionError) => set({ connectionError }),
+
+  // Astha Companion System State Properties & Actions
+  asthaBirthday: localStorage.getItem('__astha_birthday') || '2001-11-21',
+  asthaAnniversary: localStorage.getItem('__astha_anniversary') || '2022-02-14',
+  asthaReasons: (() => {
+    try {
+      const stored = localStorage.getItem('__astha_reasons');
+      return stored ? JSON.parse(stored) : [
+        { id: 'r1', text: 'Tumhari muskurahat mere din ko roshan kar deti hai.', timestamp: Date.now() - 100000 },
+        { id: 'r2', text: 'Tum jis tarah mera dhyan rakhti ho, mujhe bahut achha lagta hai.', timestamp: Date.now() - 50000 }
+      ];
+    } catch {
+      return [];
+    }
+  })(),
+  asthaSongs: (() => {
+    try {
+      const stored = localStorage.getItem('__astha_songs');
+      return stored ? JSON.parse(stored) : [
+        { id: 's1', title: 'Kesariya', artist: 'Arijit Singh', isSpecial: true, url: 'https://www.youtube.com/watch?v=BddP6PYo2Gs', timestamp: Date.now() - 100000 }
+      ];
+    } catch {
+      return [];
+    }
+  })(),
+  asthaPlans: (() => {
+    try {
+      const stored = localStorage.getItem('__astha_plans');
+      return stored ? JSON.parse(stored) : [
+        { id: 'p1', category: 'gift', text: 'Astha ke liye ek handmade card aur roses lena.', completed: false, timestamp: Date.now() - 100000 },
+        { id: 'p2', category: 'date', text: 'Anniversary star-light roof dinner plan karna.', completed: false, timestamp: Date.now() - 50000 }
+      ];
+    } catch {
+      return [];
+    }
+  })(),
+  asthaLetters: (() => {
+    try {
+      const stored = localStorage.getItem('__astha_letters');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  })(),
+
+  setAsthaBirthday: (date) => {
+    localStorage.setItem('__astha_birthday', date);
+    set({ asthaBirthday: date });
+  },
+  setAsthaAnniversary: (date) => {
+    localStorage.setItem('__astha_anniversary', date);
+    set({ asthaAnniversary: date });
+  },
+  addAsthaReason: (text) => {
+    const nextList = [...get().asthaReasons, { id: 'reas_' + Math.random().toString(36).substr(2, 9), text, timestamp: Date.now() }];
+    localStorage.setItem('__astha_reasons', JSON.stringify(nextList));
+    set({ asthaReasons: nextList });
+  },
+  deleteAsthaReason: (id) => {
+    const nextList = get().asthaReasons.filter(r => r.id !== id);
+    localStorage.setItem('__astha_reasons', JSON.stringify(nextList));
+    set({ asthaReasons: nextList });
+  },
+  addAsthaSong: (title, artist, isSpecial, url) => {
+    const nextList = [...get().asthaSongs, { id: 'song_' + Math.random().toString(36).substr(2, 9), title, artist, isSpecial: !!isSpecial, url, timestamp: Date.now() }];
+    localStorage.setItem('__astha_songs', JSON.stringify(nextList));
+    set({ asthaSongs: nextList });
+  },
+  deleteAsthaSong: (id) => {
+    const nextList = get().asthaSongs.filter(s => s.id !== id);
+    localStorage.setItem('__astha_songs', JSON.stringify(nextList));
+    set({ asthaSongs: nextList });
+  },
+  addAsthaPlan: (category, text) => {
+    const nextList = [...get().asthaPlans, { id: 'plan_' + Math.random().toString(36).substr(2, 9), category, text, completed: false, timestamp: Date.now() }];
+    localStorage.setItem('__astha_plans', JSON.stringify(nextList));
+    set({ asthaPlans: nextList });
+  },
+  toggleAsthaPlan: (id) => {
+    const nextList = get().asthaPlans.map(p => p.id === id ? { ...p, completed: !p.completed } : p);
+    localStorage.setItem('__astha_plans', JSON.stringify(nextList));
+    set({ asthaPlans: nextList });
+  },
+  deleteAsthaPlan: (id) => {
+    const nextList = get().asthaPlans.filter(p => p.id !== id);
+    localStorage.setItem('__astha_plans', JSON.stringify(nextList));
+    set({ asthaPlans: nextList });
+  },
+  addAsthaLetter: (title, text, type) => {
+    const nextList = [...get().asthaLetters, { id: 'lett_' + Math.random().toString(36).substr(2, 9), title, text, type, timestamp: Date.now() }];
+    localStorage.setItem('__astha_letters', JSON.stringify(nextList));
+    set({ asthaLetters: nextList });
+  },
+  deleteAsthaLetter: (id) => {
+    const nextList = get().asthaLetters.filter(l => l.id !== id);
+    localStorage.setItem('__astha_letters', JSON.stringify(nextList));
+    set({ asthaLetters: nextList });
+  },
 
   setStoryState: (state) => {
     const updated = { ...get().storyState, ...state };
@@ -609,11 +727,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     localStorage.setItem('__roy_reminders', JSON.stringify(nextRems));
   },
 
-  // Export Long Term Memories
+  // Export Long Term Memories & Astha Companion State
   exportMemories: () => {
     const payload = {
       memories: get().memories,
-      exportVersion: 1,
+      asthaBirthday: get().asthaBirthday,
+      asthaAnniversary: get().asthaAnniversary,
+      asthaReasons: get().asthaReasons,
+      asthaSongs: get().asthaSongs,
+      asthaPlans: get().asthaPlans,
+      asthaLetters: get().asthaLetters,
+      exportVersion: 2,
       timestamp: Date.now(),
       ownerName: get().ownerName
     };
@@ -640,7 +764,34 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
         const updatedMemories = await db.getMemories();
         set({ memories: updatedMemories });
-        await get().addMemory(`Successfully imported ${parsed.memories.length} historical long-term memories via file deck.`, 'auto');
+
+        // Load Astha properties if present
+        if (parsed.asthaBirthday) {
+          localStorage.setItem('__astha_birthday', parsed.asthaBirthday);
+          set({ asthaBirthday: parsed.asthaBirthday });
+        }
+        if (parsed.asthaAnniversary) {
+          localStorage.setItem('__astha_anniversary', parsed.asthaAnniversary);
+          set({ asthaAnniversary: parsed.asthaAnniversary });
+        }
+        if (Array.isArray(parsed.asthaReasons)) {
+          localStorage.setItem('__astha_reasons', JSON.stringify(parsed.asthaReasons));
+          set({ asthaReasons: parsed.asthaReasons });
+        }
+        if (Array.isArray(parsed.asthaSongs)) {
+          localStorage.setItem('__astha_songs', JSON.stringify(parsed.asthaSongs));
+          set({ asthaSongs: parsed.asthaSongs });
+        }
+        if (Array.isArray(parsed.asthaPlans)) {
+          localStorage.setItem('__astha_plans', JSON.stringify(parsed.asthaPlans));
+          set({ asthaPlans: parsed.asthaPlans });
+        }
+        if (Array.isArray(parsed.asthaLetters)) {
+          localStorage.setItem('__astha_letters', JSON.stringify(parsed.asthaLetters));
+          set({ asthaLetters: parsed.asthaLetters });
+        }
+
+        await get().addMemory(`Successfully imported ${parsed.memories.length} historical long-term memories and Astha Companion settings via backup file.`, 'auto');
         return true;
       }
       return false;

@@ -11,6 +11,7 @@ import YouTubeMediaHub from './components/YouTubeMediaHub';
 import CameraSystem from './components/CameraSystem';
 import StoryMode from './components/StoryMode';
 import VaultTab from './components/VaultTab';
+import ScreenAwareness from './components/ScreenAwareness';
 import * as db from './db';
 import { 
   Mic, MicOff, Power, PowerOff, Settings as SettingsIcon, LayoutDashboard, Sparkles, User, Info, MessageSquare, ShieldCheck, Share2, Send, Youtube, Disc, ListMusic, Camera, BookOpen, FolderHeart, X,
@@ -97,6 +98,75 @@ export default function App() {
 
   const checkAvatarVoiceCommands = (text: string) => {
     const norm = text.toLowerCase().trim();
+
+    const speakQuote = (txt: string) => {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(txt);
+        utterance.lang = 'hi-IN';
+        utterance.rate = 1.0;
+        utterance.pitch = 1.1;
+        window.speechSynthesis.speak(utterance);
+      }
+    };
+
+    // --- ASTHA COMPANION VOICE COMMANDS ---
+    if (norm.includes("moment save karo") || norm.includes("yaad save karo")) {
+      const memoryTxt = text.replace(/(ye|aaj ki|moment|yaad|save|karo)/gi, '').trim() || "Rishu Boss aur Astha ka pyaara moment.";
+      store.addMemory(`Astha Memory (Moment): ${memoryTxt}`, 'user');
+      speakQuote("Ji Rishu Boss, maine ye pyaari yaad local database me save kar li hai!");
+      store.setAvatarEmotion('happy');
+      return true;
+    }
+    if (norm.includes("reason save karo")) {
+      const reasonTxt = text.replace(/(ye|reason|save|karo)/gi, '').trim() || "Astha ki sweet smiles aur pyaara gussa.";
+      store.addAsthaReason(reasonTxt);
+      speakQuote("Ji Rishu Boss, maine ye reason safe couple store me save kar diya hai!");
+      store.setAvatarEmotion('smile');
+      return true;
+    }
+    if (norm.includes("pyaar karta hu") || norm.includes("pyar karta hu") || norm.includes("pyaar karta hoon") || norm.includes("pyaar karta hu")) {
+      if (store.asthaReasons.length > 0) {
+        const randRes = store.asthaReasons[Math.floor(Math.random() * store.asthaReasons.length)];
+        speakQuote(`Rishu Boss, aap Astha se isliye pyaar karte hain kyunki: ${randRes.text}`);
+        store.setAvatarEmotion('excited');
+      } else {
+        speakQuote("Rishu Boss, abhi tak aapne koi reasons save nahi kiya hai. Ek pehla reason save kijiye!");
+        store.setAvatarEmotion('confused');
+      }
+      return true;
+    }
+    if (norm.includes("photo dikhao") || norm.includes("couple photo")) {
+      speakQuote("Ji Rishu Boss, aapka custom Couple Gallery subtab open kar rahi hu. Aap donon ki khubsoorat photos yahan safe hain!");
+      store.setAvatarEmotion('excited');
+      window.dispatchEvent(new CustomEvent('switch-astha-subtab', { detail: 'gallery' }));
+      return true;
+    }
+    if (norm.includes("yaadein dikhao") || norm.includes("timeline dikhao") || norm.includes("yaad dikhao") || norm.includes("yaade dikhao")) {
+      speakQuote("Ji Rishu Boss, aapka Yaadein Timeline subtab open kar rahi hu. Aapki saari purani yaadein yahan local timeline par/mehfooz hain.");
+      store.setAvatarEmotion('smile');
+      window.dispatchEvent(new CustomEvent('switch-astha-subtab', { detail: 'timeline' }));
+      return true;
+    }
+    if (norm.includes("shayari bolo") || norm.includes("astha ke liye shayari") || norm.includes("romantic lines") || norm.includes("shayri bolo")) {
+      const localShayaris = [
+        "Dhadkano me boti hai saansein bankar, khushi milti hai tumhein apna kahkar. Tu mile toh mukammal hai meri zindagi, kyunki tum hasti ho gulab bankar, Astha!",
+        "Tumhari muskurahat mere har andhere ko ujaale me badal deti hai, Astha. Meri dunya ho tum.",
+        "Bina kahe jo dil ki baat samajh le, waisi pyaari wife ho tum, Astha. Rishu Boss ki rani saheba!"
+      ];
+      const randShay = localShayaris[Math.floor(Math.random() * localShayaris.length)];
+      speakQuote(randShay);
+      store.setAvatarEmotion('speaking');
+      return true;
+    }
+    if (norm.includes("special date") || norm.includes("date batao") || norm.includes("anniversary kab") || norm.includes("birthday kab") || norm.includes("important date")) {
+      speakQuote(`Rishu Boss, Astha ka birthday countdown aur aapki anniversary date timeline dashboard par live countdown dikha rahi hai.`);
+      store.setAvatarEmotion('happy');
+      window.dispatchEvent(new CustomEvent('switch-astha-subtab', { detail: 'dashboard' }));
+      return true;
+    }
+
+    // --- STANDARD AVATAR COMMANDS ---
     if (norm.includes("dance kar") || norm.includes("dance karo") || norm.includes("nacho") || norm.includes("nach kar")) {
       store.setAvatarEmotion('dance');
       return true;
@@ -123,6 +193,11 @@ export default function App() {
     }
     if (norm.includes("confuse") || norm.includes("confused ho jao") || norm.includes("preshaan ho")) {
       store.setAvatarEmotion('confused');
+      return true;
+    }
+    if (norm.includes("screen dekho") || norm.includes("current page dekho") || norm.includes("screen analyze") || norm.includes("screen check") || norm.includes("screen scan")) {
+      store.setAvatarEmotion('curious');
+      window.dispatchEvent(new CustomEvent('screen-awareness-trigger'));
       return true;
     }
     return false;
@@ -284,6 +359,25 @@ export default function App() {
         clearTimeout(reconnectTimeoutRef.current);
       }
     };
+  }, []);
+
+  useEffect(() => {
+    const handleComplete = (e: any) => {
+      const { name, id, response } = e.detail;
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        console.log('SCREEN_AWARENESS: Complete event heard. Sending response to WS...', response);
+        wsRef.current.send(JSON.stringify({
+          toolResponse: {
+            name,
+            id,
+            response
+          }
+        }));
+        store.addMemory(`Completed screen awareness analysis tool for Rishu Boss: Visible tab label "${response.activeTab}"`, 'auto');
+      }
+    };
+    window.addEventListener('screen-analysis-complete', handleComplete);
+    return () => window.removeEventListener('screen-analysis-complete', handleComplete);
   }, []);
 
   useEffect(() => {
@@ -988,19 +1082,24 @@ export default function App() {
                       resultMessage = `Success: Rendered ${matchedPhotos.length} photo(s) of ${filterVal} directly on the screen inside the active viewport framework. Checked and verified that all target image structures have been outputted in their true, proportional sizes (portrait, landscape, or square) alongside a Full Screen modal launcher.`;
                     }
                   }
+                } else if (name === 'analyzeActiveScreen') {
+                  window.dispatchEvent(new CustomEvent('screen-awareness-trigger', { detail: { name, id } }));
+                  resultMessage = "Screen Awareness capture panel triggered.";
                 }
               } catch (e: any) {
                 resultMessage = `Error executing browser layout action: ${e.message}`;
               }
 
               // Send immediate tool response report back to models to resume discussion
-              ws.send(JSON.stringify({
-                toolResponse: {
-                  name,
-                  id,
-                  response: { output: resultMessage }
-                }
-              }));
+              if (name !== 'analyzeActiveScreen') {
+                ws.send(JSON.stringify({
+                  toolResponse: {
+                    name,
+                    id,
+                    response: { output: resultMessage }
+                  }
+                }));
+              }
 
               store.addMemory(`Live command completed: Executed ${name}`, 'auto');
             }
@@ -1588,6 +1687,9 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Real-time Screen Awareness System */}
+      <ScreenAwareness />
     </div>
   );
 }
