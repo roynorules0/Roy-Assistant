@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import * as db from './db';
 
 export type LiveState = 'offline' | 'connecting' | 'ready' | 'listening' | 'thinking' | 'speaking';
+export type AvatarEmotion = 'idle' | 'listening' | 'thinking' | 'speaking' | 'happy' | 'excited' | 'confused' | 'celebrating' | 'sad' | 'dance' | 'hello' | 'smile' | 'curious';
 
 export interface YouTubeVideo {
   id: string;
@@ -21,6 +22,7 @@ export interface AppState {
   // Connection and Live Voice Engine State
   apiKey: string;
   liveState: LiveState;
+  avatarEmotion: AvatarEmotion;
   selectedModel: string;
   voiceVolume: number; // 0 - 100
   micGain: number; // 1 - 5
@@ -86,6 +88,7 @@ export interface AppState {
   // State actions
   setApiKey: (key: string) => void;
   setLiveState: (state: LiveState) => void;
+  setAvatarEmotion: (emotion: AvatarEmotion) => void;
   setSelectedModel: (model: string) => void;
   setVoiceVolume: (vol: number) => void;
   setMicGain: (gain: number) => void;
@@ -169,6 +172,7 @@ export interface AppState {
 export const useAppStore = create<AppState>((set, get) => ({
   apiKey: localStorage.getItem('__roy_apiKey') || '',
   liveState: 'offline',
+  avatarEmotion: 'idle',
   selectedModel: 'gemini-3.1-flash-live-preview',
   voiceVolume: Number(localStorage.getItem('__roy_volume')) || 80,
   micGain: Number(localStorage.getItem('__roy_gain')) || 2,
@@ -274,6 +278,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ apiKey: key });
   },
   setLiveState: (liveState) => set({ liveState }),
+  setAvatarEmotion: (avatarEmotion) => set({ avatarEmotion }),
   setSelectedModel: (selectedModel) => set({ selectedModel }),
   setVoiceVolume: (voiceVolume) => {
     localStorage.setItem('__roy_volume', String(voiceVolume));

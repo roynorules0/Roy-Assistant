@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useAppStore, LiveState } from './store';
 import { voiceEngine } from './audio-processor';
-import Orb from './components/Orb';
+import AnimeAvatar from './components/AnimeAvatar';
 import Waveform from './components/Waveform';
 import SettingsPanel from './components/SettingsPanel';
 import Dashboard from './components/Dashboard';
@@ -93,6 +93,39 @@ export default function App() {
     const hasExact = exactPhrases.some(phrase => norm.includes(phrase));
     
     return { isInterrupt: hasExact, isEmergency: false };
+  };
+
+  const checkAvatarVoiceCommands = (text: string) => {
+    const norm = text.toLowerCase().trim();
+    if (norm.includes("dance kar") || norm.includes("dance karo") || norm.includes("nacho") || norm.includes("nach kar")) {
+      store.setAvatarEmotion('dance');
+      return true;
+    }
+    if (norm.includes("hello bol") || norm.includes("hello bolo") || norm.includes("wave kar") || norm.includes("wave karo") || norm.includes("hi bol")) {
+      store.setAvatarEmotion('hello');
+      return true;
+    }
+    if (norm.includes("smile kar") || norm.includes("smile karo") || norm.includes("muskurao")) {
+      store.setAvatarEmotion('smile');
+      return true;
+    }
+    if (norm.includes("khush ho ja") || norm.includes("khush ho jao") || norm.includes("khush ho") || norm.includes("happy expression")) {
+      store.setAvatarEmotion('happy');
+      return true;
+    }
+    if (norm.includes("sad expression") || norm.includes("sad ho jao") || norm.includes("udaas ho jao") || norm.includes("udaas expression")) {
+      store.setAvatarEmotion('sad');
+      return true;
+    }
+    if (norm.includes("curious") || norm.includes("curious ho jao") || norm.includes("socho") || norm.includes("soch me")) {
+      store.setAvatarEmotion('curious');
+      return true;
+    }
+    if (norm.includes("confuse") || norm.includes("confused ho jao") || norm.includes("preshaan ho")) {
+      store.setAvatarEmotion('confused');
+      return true;
+    }
+    return false;
   };
 
   const handleVoiceInterrupt = (isEmergency: boolean = false) => {
@@ -209,6 +242,8 @@ export default function App() {
       setIsSubmittingText(false);
       return;
     }
+
+    checkAvatarVoiceCommands(text);
     
     // Append to local history so user has instant visual output response
     await store.addConversationMessage('user', text);
@@ -490,6 +525,8 @@ export default function App() {
             const { isInterrupt, isEmergency } = checkInterruptCommand(data.userTranscript);
             if (isInterrupt) {
               handleVoiceInterrupt(isEmergency);
+            } else {
+              checkAvatarVoiceCommands(data.userTranscript);
             }
           }
 
@@ -1107,7 +1144,7 @@ export default function App() {
 
             {/* 2. Interactive Central Voice Orb */}
             <div className="flex-1 flex items-center justify-center w-full relative">
-              <Orb onClick={toggleConnection} />
+              <AnimeAvatar onClick={toggleConnection} />
             </div>
 
             {/* Live Captions Transcript Overlay Panel (Only when connected & transcribing) */}
